@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/src/lib/utils';
+import { useLanguage } from '../lib/language-context';
+import { getBackendSource, getDashboardSummary, getRecentEvents } from '@/src/lib/api';
 
 const COLORS = {
   Happy: '#3B82F6',
@@ -25,6 +27,7 @@ const COLORS = {
 };
 
 export default function Dashboard() {
+  const { language } = useLanguage();
   const [history, setHistory] = useState<any[]>([]);
   const [pieData, setPieData] = useState<any[]>([]);
   const [stats, setStats] = useState({
@@ -35,38 +38,101 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    const rawHistory = JSON.parse(sessionStorage.getItem('emotion_history') || '[]');
-    setHistory(rawHistory);
+    const loadData = async () => {
+      try {
+        const source = getBackendSource();
+        const [recentEvents, summary] = await Promise.all([
+          getRecentEvents(100, source),
+          getDashboardSummary(24, source),
+        ]);
 
-    if (rawHistory.length > 0) {
-      const counts: Record<string, number> = {};
-      rawHistory.forEach((item: any) => {
-        counts[item.emotion] = (counts[item.emotion] || 0) + 1;
-      });
+        setHistory(recentEvents);
 
-      const formattedPie = Object.entries(counts).map(([name, value]) => ({
-        name,
-        value: Math.round((value / rawHistory.length) * 100),
-        color: COLORS[name as keyof typeof COLORS] || '#ccc'
-      }));
-      setPieData(formattedPie);
+        if (recentEvents.length > 0) {
+          const counts: Record<string, number> = {};
+          recentEvents.forEach((item: any) => {
+            counts[item.emotion] = (counts[item.emotion] || 0) + 1;
+          });
 
-      const primary = Object.entries(counts).reduce((a, b) => a[1] > b[1] ? a : b)[0];
-      setStats({
-        primary,
-        confidence: '92.4%',
-        interactions: rawHistory.length,
-        alerts: rawHistory.filter((h: any) => h.emotion === 'Sad' || h.emotion === 'Angry').length
-      });
-    }
+          const formattedPie = Object.entries(counts).map(([name, value]) => ({
+            name,
+            value: Math.round((value / recentEvents.length) * 100),
+            color: COLORS[name as keyof typeof COLORS] || '#ccc'
+          }));
+          setPieData(formattedPie);
+        } else {
+          setPieData([]);
+        }
+
+        setStats({
+          primary: summary.primary_emotion || 'None',
+          confidence: `${summary.avg_confidence.toFixed(1)}%`,
+          interactions: summary.total_events,
+          alerts: summary.alert_events,
+        });
+      } catch (loadError) {
+        console.error('Failed to load dashboard data from API', loadError);
+      }
+    };
+
+    loadData();
   }, []);
 
   const chartData = history.slice(-10).map(h => ({
-    time: new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    time: new Date(h.detected_at || h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     value: h.emotion === 'Happy' ? 100 : h.emotion === 'Neutral' ? 50 : 0
   }));
 
+  const text = {
+    en: {
+      primaryEmotion: 'Primary Emotion',
+      averageConfidence: 'Average Confidence',
+      sessionDetections: 'Session Detections',
+      alerts: 'Alerts (Sad/Angry)',
+      trendTitle: 'Recent Emotion Trend',
+      trendSubtitle: 'Real-time session data',
+      trendEmpty: 'No session data yet. Go to Live Monitor to start detection.',
+      sessionDistribution: 'Session Distribution',
+      waitingForData: 'Waiting for data...',
+      insightsTitle: 'Zara Real-Time Insights',
+      insightsIntro: 'Based on your current session data:',
+      positiveTip: 'Great progress. The child is showing stronger positive engagement.',
+      neutralTip: 'Consider a short break or a fun activity to shift the mood.',
+      startMonitorTip: 'Start live monitoring to receive AI insights.',
+      sessionAlerts: 'Session Alerts',
+      attentionNeeded: 'Needs Attention',
+      attentionSummary: `This session has detected ${stats.alerts} sad/angry emotions.`,
+      allGood: 'All Good',
+      allGoodSummary: 'No negative emotional shifts have been detected so far.',
+    },
+    ta: {
+      primaryEmotion: 'முக்கிய உணர்வு',
+      averageConfidence: 'சராசரி நம்பிக்கை',
+      sessionDetections: 'அமர்வு கண்டறிதல்கள்',
+      alerts: 'எச்சரிக்கைகள் (சோகம்/கோபம்)',
+      trendTitle: 'சமீபத்திய உணர்வு ஓட்டம்',
+      trendSubtitle: 'நிகழ்நேர அமர்வு தரவு',
+      trendEmpty: 'இன்னும் அமர்வு தரவு இல்லை. கண்டறிதலைத் தொடங்க நேரடி கண்காணிப்பிற்குச் செல்லவும்.',
+      sessionDistribution: 'அமர்வு விநியோகம்',
+      waitingForData: 'தரவிற்காகக் காத்திருக்கிறது...',
+      insightsTitle: 'சாராவின் நிகழ்நேர நுண்ணறிவு',
+      insightsIntro: 'உங்கள் தற்போதைய அமர்வு தரவின் அடிப்படையில்:',
+      positiveTip: 'சிறந்த வேலை! குழந்தை அதிக நேர்மறையான ஈடுபாட்டைக் காட்டுகிறது.',
+      neutralTip: 'மனநிலையை மாற்ற ஒரு சிறிய இடைவெளி அல்லது வேடிக்கையான செயல்பாட்டைக் கருத்தில் கொள்ளுங்கள்.',
+      startMonitorTip: 'AI நுண்ணறிவுகளைப் பெற நேரடி கண்காணிப்பைத் தொடங்கவும்.',
+      sessionAlerts: 'அமர்வு எச்சரிக்கைகள்',
+      attentionNeeded: 'கவனம் தேவை',
+      attentionSummary: `இந்த அமர்வில் ${stats.alerts} சோகம்/கோபம் உணர்வுகள் கண்டறியப்பட்டுள்ளன.`,
+      allGood: 'எல்லாம் சரி',
+      allGoodSummary: 'இதுவரை எதிர்மறையான உணர்ச்சி மாற்றங்கள் எதுவும் கண்டறியப்படவில்லை.',
+    },
+  }[language];
+
   const translateEmotion = (emotion: string) => {
+    if (language === 'en') {
+      return emotion;
+    }
+
     const translations: { [key: string]: string } = {
       'Happy': 'மகிழ்ச்சி',
       'Sad': 'சோகம்',
@@ -85,25 +151,25 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title="முக்கிய உணர்வு" 
+          title={text.primaryEmotion}
           value={translateEmotion(stats.primary)} 
           icon={Smile} 
           color="bg-blue-500" 
         />
         <StatCard 
-          title="சராசரி நம்பிக்கை" 
+          title={text.averageConfidence}
           value={stats.confidence} 
           icon={BrainCircuit} 
           color="bg-purple-500"
         />
         <StatCard 
-          title="அமர்வு கண்டறிதல்கள்" 
+          title={text.sessionDetections}
           value={stats.interactions} 
           icon={TrendingUp} 
           color="bg-emerald-500"
         />
         <StatCard 
-          title="எச்சரிக்கைகள் (சோகம்/கோபம்)" 
+          title={text.alerts}
           value={stats.alerts} 
           icon={AlertCircle} 
           color="bg-rose-500"
@@ -114,8 +180,8 @@ export default function Dashboard() {
         {/* Emotion Trend */}
         <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-lg font-bold text-slate-800">சமீபத்திய உணர்வு ஓட்டம்</h2>
-            <p className="text-xs text-slate-400">நிகழ்நேர அமர்வு தரவு</p>
+            <h2 className="text-lg font-bold text-slate-800">{text.trendTitle}</h2>
+            <p className="text-xs text-slate-400">{text.trendSubtitle}</p>
           </div>
           <div className="h-[300px]">
             {chartData.length > 0 ? (
@@ -132,7 +198,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-slate-300 italic">
-                இன்னும் அமர்வு தரவு இல்லை. கண்டறிதலைத் தொடங்க நேரடி கண்காணிப்பிற்குச் செல்லவும்.
+                {text.trendEmpty}
               </div>
             )}
           </div>
@@ -140,7 +206,7 @@ export default function Dashboard() {
 
         {/* Behavior Summary */}
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-800 mb-8">அமர்வு விநியோகம்</h2>
+          <h2 className="text-lg font-bold text-slate-800 mb-8">{text.sessionDistribution}</h2>
           <div className="h-[250px]">
             {pieData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -163,7 +229,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-slate-300 italic">
-                தரவிற்காகக் காத்திருக்கிறது...
+                {text.waitingForData}
               </div>
             )}
           </div>
@@ -186,30 +252,30 @@ export default function Dashboard() {
         <div className="bg-blue-600 p-8 rounded-3xl text-white shadow-lg shadow-blue-200">
           <div className="flex items-center gap-3 mb-4">
             <BrainCircuit className="w-6 h-6" />
-            <h2 className="text-lg font-bold">சாராவின் நிகழ்நேர நுண்ணறிவு</h2>
+            <h2 className="text-lg font-bold">{text.insightsTitle}</h2>
           </div>
-          <p className="text-blue-100 mb-6">உங்கள் தற்போதைய அமர்வு தரவின் அடிப்படையில்:</p>
+          <p className="text-blue-100 mb-6">{text.insightsIntro}</p>
           <ul className="space-y-3">
             {stats.primary === 'Happy' ? (
               <li className="bg-white/10 p-3 rounded-2xl flex items-center gap-3">
                 <span className="bg-white/20 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">✓</span>
-                <span>சிறந்த வேலை! குழந்தை அதிக நேர்மறையான ஈடுபாட்டைக் காட்டுகிறது.</span>
+                <span>{text.positiveTip}</span>
               </li>
             ) : stats.primary !== 'None' ? (
               <li className="bg-white/10 p-3 rounded-2xl flex items-center gap-3">
                 <span className="bg-white/20 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">!</span>
-                <span>மனநிலையை மாற்ற ஒரு சிறிய இடைவெளி அல்லது வேடிக்கையான செயல்பாட்டைக் கருத்தில் கொள்ளுங்கள்.</span>
+                <span>{text.neutralTip}</span>
               </li>
             ) : (
               <li className="bg-white/10 p-3 rounded-2xl flex items-center gap-3">
-                <span>AI நுண்ணறிவுகளைப் பெற நேரடி கண்காணிப்பைத் தொடங்கவும்.</span>
+                <span>{text.startMonitorTip}</span>
               </li>
             )}
           </ul>
         </div>
 
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-800 mb-6">அமர்வு எச்சரிக்கைகள்</h2>
+          <h2 className="text-lg font-bold text-slate-800 mb-6">{text.sessionAlerts}</h2>
           <div className="space-y-4">
             {stats.alerts > 0 ? (
               <div className="flex gap-4 p-4 bg-rose-50 rounded-2xl border border-rose-100">
@@ -217,8 +283,8 @@ export default function Dashboard() {
                   <AlertCircle className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-rose-900 text-sm">கவனம் தேவை</h4>
-                  <p className="text-rose-700 text-xs mt-1">இந்த அமர்வில் {stats.alerts} சோகம்/கோபம் உணர்வுகள் கண்டறியப்பட்டுள்ளன.</p>
+                  <h4 className="font-bold text-rose-900 text-sm">{text.attentionNeeded}</h4>
+                  <p className="text-rose-700 text-xs mt-1">{text.attentionSummary}</p>
                 </div>
               </div>
             ) : (
@@ -227,8 +293,8 @@ export default function Dashboard() {
                   <Smile className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-emerald-900 text-sm">எல்லாம் சரி</h4>
-                  <p className="text-emerald-700 text-xs mt-1">இதுவரை எதிர்மறையான உணர்ச்சி மாற்றங்கள் எதுவும் கண்டறியப்படவில்லை.</p>
+                  <h4 className="font-bold text-emerald-900 text-sm">{text.allGood}</h4>
+                  <p className="text-emerald-700 text-xs mt-1">{text.allGoodSummary}</p>
                 </div>
               </div>
             )}

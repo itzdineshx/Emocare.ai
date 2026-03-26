@@ -13,19 +13,45 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { useLanguage } from '../lib/language-context';
 
-const navItems = [
-  { icon: LayoutDashboard, label: 'டாஷ்போர்டு', path: '/' },
-  { icon: Video, label: 'நேரடி கண்காணிப்பு', path: '/monitor' },
-  { icon: BarChart3, label: 'நுண்ணறிவு', path: '/insights' },
-  { icon: Bell, label: 'அறிவிப்புகள்', path: '/notifications' },
-  { icon: MessageCircle, label: 'AI துணை', path: '/companion' },
-  { icon: Settings, label: 'அமைப்புகள்', path: '/settings' },
-];
+const localizedLabels = {
+  en: {
+    dashboard: 'Dashboard',
+    monitor: 'Live Monitor',
+    insights: 'Insights',
+    notifications: 'Notifications',
+    companion: 'AI Companion',
+    settings: 'Settings',
+    assistant: 'Zara Assistant',
+    online: 'Online',
+  },
+  ta: {
+    dashboard: 'டாஷ்போர்டு',
+    monitor: 'நேரடி கண்காணிப்பு',
+    insights: 'நுண்ணறிவு',
+    notifications: 'அறிவிப்புகள்',
+    companion: 'AI துணை',
+    settings: 'அமைப்புகள்',
+    assistant: 'சாரா உதவியாளர்',
+    online: 'ஆன்லைன்',
+  },
+};
 
 export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const location = useLocation();
+  const { language } = useLanguage();
+
+  const labels = localizedLabels[language];
+  const navItems = [
+    { icon: LayoutDashboard, label: labels.dashboard, path: '/' },
+    { icon: Video, label: labels.monitor, path: '/monitor' },
+    { icon: BarChart3, label: labels.insights, path: '/insights' },
+    { icon: Bell, label: labels.notifications, path: '/notifications' },
+    { icon: MessageCircle, label: labels.companion, path: '/companion' },
+    { icon: Settings, label: labels.settings, path: '/settings' },
+  ];
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden">
@@ -96,10 +122,10 @@ export default function Layout() {
           </h1>
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end">
-              <span className="text-sm font-medium">சாரா உதவியாளர்</span>
+              <span className="text-sm font-medium">{labels.assistant}</span>
               <span className="text-xs text-green-500 flex items-center gap-1">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                ஆன்லைன்
+                {labels.online}
               </span>
             </div>
             <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">

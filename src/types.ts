@@ -1,4 +1,5 @@
 export type Emotion = 'Happy' | 'Sad' | 'Angry' | 'Neutral' | 'Surprised';
+export type Language = 'en' | 'ta';
 
 export interface EmotionData {
   timestamp: string;

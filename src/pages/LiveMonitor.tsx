@@ -18,8 +18,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
-import { GoogleGenAI, Type } from "@google/genai";
-import { retryAI } from "@/src/lib/ai-retry";
+import { createEmotionEvent, getBackendSource } from '@/src/lib/api';
+import { generateOpenRouterVisionJson, generateOpenRouterVisionText } from '@/src/lib/openrouter';
 
 // Supported emotions
 const EMOTIONS = ['Happy', 'Sad', 'Neutral', 'Angry', 'Surprised', 'Fearful', 'Disgusted'];
@@ -41,6 +41,8 @@ export default function LiveMonitor() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef(''); // Use ref to get latest transcript in detection loop
+  const sourceRef = useRef(getBackendSource());
+  const monitorSessionIdRef = useRef(`monitor-${Date.now()}`);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -142,65 +144,43 @@ export default function LiveMonitor() {
 
       if (!base64Image || base64Image.length < 100) return; // Basic check for empty image
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
       const currentText = transcriptRef.current;
-      
-      const result = await retryAI(async () => {
-        return await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: {
-            parts: [
-              { inlineData: { data: base64Image, mimeType: "image/jpeg" } },
-              { text: `You are an expert child psychologist and advanced multimodal emotion recognition AI. 
-                Analyze this image and the child's recent speech: "${currentText}".
-                
-                CRITICAL ANALYSIS GUIDELINES:
-                1. FACIAL MICRO-EXPRESSIONS: Look for subtle cues in the eyes (crinkling, widening), mouth (tightening, drooping), and brow (furrowing, raising).
-                2. BODY LANGUAGE & GESTURES: Analyze posture (slumped vs upright), hand positions (fidgeting, covering face), and overall body tension.
-                3. SPEECH CONTEXT: How does the child's voice/words match their appearance? Look for incongruence.
-                4. DEVELOPMENTAL CONTEXT: Interpret signals through the lens of child development.
-                5. CROSS-MODAL REASONING: Integrate all signals. If the face looks neutral but the speech is distressed and the child is fidgeting, the emotion might be 'Fearful' or 'Sad'.
-                
-                Detect:
-                - Primary Emotion: Choose from [Happy, Sad, Neutral, Angry, Surprised, Fearful, Disgusted]
-                - Specific Gesture: (e.g., Waving, Hands on face, Crossed arms, Thumbs up, Pointing, Fidgeting, None)
-                - Confidence Score: (0-100)
-                - Zara Response: A very short, gentle, and empathetic sentence Zara should say to the child right now based on their emotion and speech. Keep it under 15 words. Respond ONLY in English.` }
-            ]
-          },
-          config: { 
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                reasoning: { type: Type.STRING, description: "Detailed analysis of micro-expressions, gestures, and speech context" },
-                emotion: { type: Type.STRING, enum: EMOTIONS, description: "The detected primary emotion" },
-                gesture: { type: Type.STRING, description: "The detected gesture" },
-                confidence: { type: Type.INTEGER, description: "Confidence score from 0 to 100" },
-                zaraResponse: { type: Type.STRING, description: "What Zara should say to the child" }
-              },
-              required: ["reasoning", "emotion", "gesture", "confidence", "zaraResponse"]
-            }
-          }
-        });
-      }, 5, 2000);
 
-      const data = JSON.parse(result.text || '{}');
+      const data = await generateOpenRouterVisionJson({
+        base64Image,
+        prompt: `You are an expert child psychologist and advanced multimodal emotion recognition AI.
+Analyze this image and the child's recent speech: "${currentText}".
+
+CRITICAL ANALYSIS GUIDELINES:
+1. FACIAL MICRO-EXPRESSIONS: Look for subtle cues in the eyes (crinkling, widening), mouth (tightening, drooping), and brow (furrowing, raising).
+2. BODY LANGUAGE & GESTURES: Analyze posture (slumped vs upright), hand positions (fidgeting, covering face), and overall body tension.
+3. SPEECH CONTEXT: How does the child's voice/words match their appearance? Look for incongruence.
+4. DEVELOPMENTAL CONTEXT: Interpret signals through the lens of child development.
+5. CROSS-MODAL REASONING: Integrate all signals.
+
+Return JSON with keys:
+- reasoning (string)
+- emotion (one of: Happy, Sad, Neutral, Angry, Surprised, Fearful, Disgusted)
+- gesture (string)
+- confidence (number from 0 to 100)
+- zaraResponse (very short empathetic sentence under 15 words, English only)`
+      });
       
       if (data.emotion && EMOTIONS.includes(data.emotion)) {
         setCurrentEmotion(data.emotion);
         setCurrentGesture(data.gesture || 'None');
         setConfidence(data.confidence || 90);
         
-        // Store in session for dashboard
-        const history = JSON.parse(sessionStorage.getItem('emotion_history') || '[]');
-        history.push({ 
-          emotion: data.emotion, 
-          gesture: data.gesture,
-          timestamp: new Date().toISOString() 
+        await createEmotionEvent({
+          source: sourceRef.current,
+          idempotency_key: `${sourceRef.current}-${monitorSessionIdRef.current}-${Date.now()}`,
+          session_id: monitorSessionIdRef.current,
+          emotion: data.emotion,
+          confidence: Number(data.confidence || 90),
+          gesture: data.gesture || 'None',
+          transcript: currentText || undefined,
+          detected_at: new Date().toISOString(),
         });
-        sessionStorage.setItem('emotion_history', JSON.stringify(history.slice(-50)));
 
         // Proactive Zara Response based on detected emotion
         if (data.zaraResponse && data.confidence > 60) {
@@ -253,8 +233,6 @@ export default function LiveMonitor() {
     setZaraStatus('Thinking');
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
       let imagePart = null;
       if (isCameraOn && videoRef.current) {
         const canvas = document.createElement('canvas');
@@ -299,14 +277,10 @@ export default function LiveMonitor() {
         6. Acknowledge their gesture if it's meaningful (like waving).
         7. Respond ONLY in English.`;
 
-      const result = await retryAI(async () => {
-        return await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: imagePart ? { parts: [imagePart, { text: prompt }] } : prompt,
-        });
+      const text = await generateOpenRouterVisionText({
+        prompt,
+        base64Image: imagePart?.inlineData.data,
       });
-
-      const text = result.text || "I'm listening!";
       setZaraResponse(text);
       setZaraStatus('Responding');
       speak(text);

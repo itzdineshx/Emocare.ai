@@ -9,8 +9,13 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
-import { GoogleGenAI } from "@google/genai";
-import { retryAI } from "@/src/lib/ai-retry";
+import { generateOpenRouterText } from '@/src/lib/openrouter';
+import {
+  createChatMessage,
+  getBackendSource,
+  getChatMessages,
+  getRecentEvents,
+} from '@/src/lib/api';
 
 interface Message {
   id: string;
@@ -19,7 +24,22 @@ interface Message {
   timestamp: Date;
 }
 
+const CHAT_SESSION_KEY = 'emocare-chat-session-id';
+
+const getOrCreateChatSessionId = () => {
+  const existing = localStorage.getItem(CHAT_SESSION_KEY);
+  if (existing) {
+    return existing;
+  }
+
+  const created = `chat-${Date.now()}`;
+  localStorage.setItem(CHAT_SESSION_KEY, created);
+  return created;
+};
+
 export default function AICompanion() {
+  const sourceRef = useRef(getBackendSource());
+  const chatSessionIdRef = useRef(getOrCreateChatSessionId());
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -40,6 +60,35 @@ export default function AICompanion() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        const history = await getChatMessages(sourceRef.current, chatSessionIdRef.current, 100);
+        if (history.length > 0) {
+          setMessages(
+            history.map((item) => ({
+              id: item.id,
+              role: item.role === 'system' ? 'zara' : item.role,
+              text: item.text,
+              timestamp: new Date(item.created_at),
+            }))
+          );
+        } else {
+          await createChatMessage({
+            source: sourceRef.current,
+            session_id: chatSessionIdRef.current,
+            role: 'zara',
+            text: "Hi there! I'm Zara, your AI friend. How are you feeling today?",
+          });
+        }
+      } catch (loadError) {
+        console.error('Failed to load chat history from API', loadError);
+      }
+    };
+
+    loadMessages();
+  }, []);
 
   // Speech Recognition Setup
   useEffect(() => {
@@ -72,40 +121,48 @@ export default function AICompanion() {
     setIsThinking(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
-      // Get latest emotion context
-      const sessionData = JSON.parse(sessionStorage.getItem('emotion_history') || '[]');
-      const latestEmotion = sessionData.length > 0 ? sessionData[sessionData.length - 1].emotion : 'Neutral';
-      const latestGesture = sessionData.length > 0 ? sessionData[sessionData.length - 1].gesture : 'None';
-
-      const response = await retryAI(async () => {
-        return await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `You are Zara, a very soft, gentle, and empathetic AI friend for children. 
-          Your voice and tone should be like a kind preschool teacher or a warm, fuzzy teddy bear.
-          
-          CURRENT CONTEXT:
-          - Child's Detected Emotion: ${latestEmotion}
-          - Child's Current Gesture: ${latestGesture}
-          - Child said: "${text}"
-          
-          INSTRUCTIONS:
-          1. Be extra gentle and soft. Use words like "friend", "sweetie", or "buddy" where appropriate.
-          2. If they look Sad, be very comforting and ask "Are you okay, friend?".
-          3. If they are Happy, share their joy with a soft, cheerful tone.
-          4. Keep responses short, simple, and very encouraging.
-          5. Always prioritize making the child feel safe and loved.
-          6. Respond ONLY in English.`,
-        });
+      await createChatMessage({
+        source: sourceRef.current,
+        session_id: chatSessionIdRef.current,
+        role: 'user',
+        text,
       });
+
+      // Get latest emotion context
+      const latestEvents = await getRecentEvents(1, sourceRef.current);
+      const latestEmotion = latestEvents.length > 0 ? latestEvents[0].emotion : 'Neutral';
+      const latestGesture = latestEvents.length > 0 ? (latestEvents[0].gesture || 'None') : 'None';
+
+      const responseText = await generateOpenRouterText(`You are Zara, a very soft, gentle, and empathetic AI friend for children.
+Your voice and tone should be like a kind preschool teacher or a warm, fuzzy teddy bear.
+
+CURRENT CONTEXT:
+- Child's Detected Emotion: ${latestEmotion}
+- Child's Current Gesture: ${latestGesture}
+- Child said: "${text}"
+
+INSTRUCTIONS:
+1. Be extra gentle and soft. Use words like "friend", "sweetie", or "buddy" where appropriate.
+2. If they look Sad, be very comforting and ask "Are you okay, friend?".
+3. If they are Happy, share their joy with a soft, cheerful tone.
+4. Keep responses short, simple, and very encouraging.
+5. Always prioritize making the child feel safe and loved.
+6. Respond ONLY in English.`);
 
       const zaraMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'zara',
-        text: response.text || "That's interesting! Tell me more.",
+        text: responseText || "That's interesting! Tell me more.",
         timestamp: new Date()
       };
+
+      await createChatMessage({
+        source: sourceRef.current,
+        session_id: chatSessionIdRef.current,
+        role: 'zara',
+        text: zaraMessage.text,
+        emotion: latestEmotion,
+      });
 
       setMessages(prev => [...prev, zaraMessage]);
       speak(zaraMessage.text);

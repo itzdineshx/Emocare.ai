@@ -8,8 +8,20 @@ import {
   Database,
   ChevronRight
 } from 'lucide-react';
+import { useLanguage } from '../lib/language-context';
+import type { Language } from '../types';
 
-const SettingItem = ({ icon: Icon, title, description, toggle }: any) => (
+type ToggleState = 'on' | 'off';
+
+interface SettingItemProps {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  toggle?: ToggleState;
+  action?: React.ReactNode;
+}
+
+const SettingItem = ({ icon: Icon, title, description, toggle, action }: SettingItemProps) => (
   <div className="flex items-center justify-between p-6 bg-white rounded-3xl border border-slate-100 shadow-sm">
     <div className="flex items-center gap-4">
       <div className="p-3 bg-slate-50 rounded-2xl text-slate-500">
@@ -20,7 +32,9 @@ const SettingItem = ({ icon: Icon, title, description, toggle }: any) => (
         <p className="text-sm text-slate-500">{description}</p>
       </div>
     </div>
-    {toggle ? (
+    {action ? (
+      action
+    ) : toggle ? (
       <label className="relative inline-flex items-center cursor-pointer">
         <input type="checkbox" className="sr-only peer" defaultChecked={toggle === 'on'} />
         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -32,6 +46,14 @@ const SettingItem = ({ icon: Icon, title, description, toggle }: any) => (
 );
 
 export default function Settings() {
+  const { language, setLanguage } = useLanguage();
+
+  const setSelectedLanguage = (nextLanguage: Language) => {
+    setLanguage(nextLanguage);
+  };
+
+  const languageDescription = language === 'en' ? 'English (Default)' : 'Tamil';
+
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <section className="space-y-4">
@@ -52,7 +74,33 @@ export default function Settings() {
           <SettingItem 
             icon={Globe} 
             title="Language" 
-            description="English (Default)" 
+            description={languageDescription}
+            action={
+              <div className="flex rounded-xl bg-slate-100 p-1 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedLanguage('en')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                    language === 'en'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLanguage('ta')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                    language === 'ta'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Tamil
+                </button>
+              </div>
+            }
           />
         </div>
       </section>

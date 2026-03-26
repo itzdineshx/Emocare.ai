@@ -4,24 +4,57 @@ import {
   AreaChart, Area
 } from 'recharts';
 import { Calendar, Download, Filter } from 'lucide-react';
+import { useLanguage } from '../lib/language-context';
 
-const weeklyData = [
-  { day: 'திங்கள்', happy: 70, sad: 10, angry: 20 },
-  { day: 'செவ்வாய்', happy: 80, sad: 5, angry: 15 },
-  { day: 'புதன்', happy: 65, sad: 20, angry: 15 },
-  { day: 'வியாழன்', happy: 90, sad: 5, angry: 5 },
-  { day: 'வெள்ளி', happy: 75, sad: 15, angry: 10 },
-  { day: 'சனி', happy: 85, sad: 10, angry: 5 },
-  { day: 'ஞாயிறு', happy: 95, sad: 2, angry: 3 },
-];
+const weeklyDataByLanguage = {
+  en: [
+    { day: 'Mon', happy: 70, sad: 10, angry: 20 },
+    { day: 'Tue', happy: 80, sad: 5, angry: 15 },
+    { day: 'Wed', happy: 65, sad: 20, angry: 15 },
+    { day: 'Thu', happy: 90, sad: 5, angry: 5 },
+    { day: 'Fri', happy: 75, sad: 15, angry: 10 },
+    { day: 'Sat', happy: 85, sad: 10, angry: 5 },
+    { day: 'Sun', happy: 95, sad: 2, angry: 3 },
+  ],
+  ta: [
+    { day: 'திங்கள்', happy: 70, sad: 10, angry: 20 },
+    { day: 'செவ்வாய்', happy: 80, sad: 5, angry: 15 },
+    { day: 'புதன்', happy: 65, sad: 20, angry: 15 },
+    { day: 'வியாழன்', happy: 90, sad: 5, angry: 5 },
+    { day: 'வெள்ளி', happy: 75, sad: 15, angry: 10 },
+    { day: 'சனி', happy: 85, sad: 10, angry: 5 },
+    { day: 'ஞாயிறு', happy: 95, sad: 2, angry: 3 },
+  ],
+};
+
+const textByLanguage = {
+  en: {
+    title: 'Emotional Insights',
+    subtitle: 'Explore long-term emotional patterns in depth',
+    exportData: 'Export Data',
+    weeklyDistribution: 'Weekly Emotion Distribution',
+    engagementTrend: 'Engagement Trend Over Time',
+  },
+  ta: {
+    title: 'உணர்ச்சி நுண்ணறிவு',
+    subtitle: 'நீண்ட கால உணர்ச்சி முறைகளை ஆழமாக ஆராயுங்கள்',
+    exportData: 'தரவை ஏற்றுமதி செய்',
+    weeklyDistribution: 'வாராந்திர உணர்ச்சி விநியோகம்',
+    engagementTrend: 'காலப்போக்கில் ஈடுபாட்டின் நிலை',
+  },
+};
 
 export default function Insights() {
+  const { language } = useLanguage();
+  const weeklyData = weeklyDataByLanguage[language];
+  const text = textByLanguage[language];
+
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">உணர்ச்சி நுண்ணறிவு</h2>
-          <p className="text-slate-500">நீண்ட கால உணர்ச்சி முறைகளை ஆழமாக ஆராயுங்கள்</p>
+          <h2 className="text-2xl font-bold text-slate-800">{text.title}</h2>
+          <p className="text-slate-500">{text.subtitle}</p>
         </div>
         <div className="flex gap-3">
           <button className="bg-white border border-slate-200 p-2 rounded-xl text-slate-600 hover:bg-slate-50">
@@ -32,7 +65,7 @@ export default function Insights() {
           </button>
           <button className="bg-blue-600 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2">
             <Download className="w-4 h-4" />
-            தரவை ஏற்றுமதி செய்
+            {text.exportData}
           </button>
         </div>
       </div>
@@ -40,7 +73,7 @@ export default function Insights() {
       <div className="grid grid-cols-1 gap-8">
         {/* Weekly Distribution */}
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-8">வாராந்திர உணர்ச்சி விநியோகம்</h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-8">{text.weeklyDistribution}</h3>
           <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyData}>
@@ -61,7 +94,7 @@ export default function Insights() {
 
         {/* Engagement Level */}
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-8">காலப்போக்கில் ஈடுபாட்டின் நிலை</h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-8">{text.engagementTrend}</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={weeklyData}>
