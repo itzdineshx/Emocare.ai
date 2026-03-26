@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     mongodb_url: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "emocare"
     cors_origins: str = "http://localhost:5173"
+    cors_origin_regex: str = ""
 
     sync_poll_interval_seconds: int = 30
     auto_sync_source: str = ""
@@ -29,7 +30,13 @@ class Settings(BaseSettings):
 
     @property
     def parsed_cors_origins(self) -> list[str]:
-        return [origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()]
+        normalized = self.cors_origins.replace("\n", ",").replace(";", ",")
+        origins: list[str] = []
+        for item in normalized.split(","):
+            candidate = item.strip().strip('"').strip("'").rstrip("/")
+            if candidate:
+                origins.append(candidate)
+        return origins
 
 
 @lru_cache

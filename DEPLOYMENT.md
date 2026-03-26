@@ -38,6 +38,12 @@
 - Live Monitor writes events
 - AI Companion reads and writes chat
 
+If you still see preflight CORS errors:
+
+1. In Render, make sure `CORS_ORIGINS` has no extra quotes around each domain.
+2. Add `CORS_ORIGIN_REGEX=https://.*\\.vercel\\.app` if you use preview deployments.
+3. Trigger a full redeploy after changing environment variables.
+
 ## 4) Production Tips
 
 1. Use separate values per environment:
