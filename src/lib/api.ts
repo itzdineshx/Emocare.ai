@@ -1,4 +1,14 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000/api/v1';
+const RAW_API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000/api/v1';
+
+function normalizeApiBase(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, '');
+  if (trimmed.endsWith('/api/v1')) {
+    return trimmed;
+  }
+  return `${trimmed}/api/v1`;
+}
+
+const API_BASE = normalizeApiBase(RAW_API_BASE);
 const DASHBOARD_SOURCE = (import.meta.env.VITE_DASHBOARD_SOURCE as string | undefined) || 'dashboard-web';
 
 export interface EmotionEventPayload {
