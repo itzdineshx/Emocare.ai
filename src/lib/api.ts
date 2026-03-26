@@ -83,6 +83,42 @@ export interface ChatMessageRecord {
   created_at: string;
 }
 
+export interface ConversationThreadRecord {
+  source: string;
+  session_id: string;
+  child_id?: string | null;
+  total_messages: number;
+  last_message_at: string;
+  last_role: string;
+  last_message_preview: string;
+}
+
+export interface SystemLogPayload {
+  source: string;
+  level?: 'debug' | 'info' | 'warning' | 'error';
+  category?: string;
+  message: string;
+  child_id?: string;
+  parent_id?: string;
+  user_id?: string;
+  session_id?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface SystemLogRecord {
+  id: string;
+  source: string;
+  level: string;
+  category: string;
+  message: string;
+  child_id?: string | null;
+  parent_id?: string | null;
+  user_id?: string | null;
+  session_id?: string | null;
+  context?: Record<string, unknown> | null;
+  created_at: string;
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text();
@@ -225,4 +261,114 @@ export async function getChatMessages(source: string, sessionId: string, limit =
   }
 
   return apiFetch<ChatMessageRecord[]>(`/chat/messages?${search.toString()}`);
+}
+
+export async function getConversationThreads(limit = 50, source?: string, childId?: string): Promise<ConversationThreadRecord[]> {
+  const search = new URLSearchParams({ limit: String(limit) });
+  if (source) {
+    search.set('source', source);
+  }
+  if (childId) {
+    search.set('child_id', childId);
+  }
+
+  return apiFetch<ConversationThreadRecord[]>(`/chat/conversations?${search.toString()}`);
+}
+
+export async function createSystemLog(payload: SystemLogPayload): Promise<SystemLogRecord> {
+  return apiFetch<SystemLogRecord>('/logs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getRecentLogs(params: {
+  limit?: number;
+  source?: string;
+  childId?: string;
+  level?: string;
+  sessionId?: string;
+  since?: string;
+}): Promise<SystemLogRecord[]> {
+  const search = new URLSearchParams({ limit: String(params.limit ?? 100) });
+  if (params.source) {
+    search.set('source', params.source);
+  }
+  if (params.childId) {
+    search.set('child_id', params.childId);
+  }
+  if (params.level) {
+    search.set('level', params.level);
+  }
+  if (params.sessionId) {
+    search.set('session_id', params.sessionId);
+  }
+  if (params.since) {
+    search.set('since', params.since);
+  }
+
+  return apiFetch<SystemLogRecord[]>(`/logs/recent?${search.toString()}`);
+}
+
+export async function exportEventsForSync(params: {
+  limit?: number;
+  source?: string;
+  childId?: string;
+  since?: string;
+}): Promise<EmotionEventRecord[]> {
+  const search = new URLSearchParams({ limit: String(params.limit ?? 500) });
+  if (params.source) {
+    search.set('source', params.source);
+  }
+  if (params.childId) {
+    search.set('child_id', params.childId);
+  }
+  if (params.since) {
+    search.set('since', params.since);
+  }
+  return apiFetch<EmotionEventRecord[]>(`/sync/export/events?${search.toString()}`);
+}
+
+export async function exportChatForSync(params: {
+  source: string;
+  sessionId?: string;
+  childId?: string;
+  limit?: number;
+  since?: string;
+}): Promise<ChatMessageRecord[]> {
+  const search = new URLSearchParams({ source: params.source, limit: String(params.limit ?? 500) });
+  if (params.sessionId) {
+    search.set('session_id', params.sessionId);
+  }
+  if (params.childId) {
+    search.set('child_id', params.childId);
+  }
+  if (params.since) {
+    search.set('since', params.since);
+  }
+  return apiFetch<ChatMessageRecord[]>(`/sync/export/chat?${search.toString()}`);
+}
+
+export async function exportLogsForSync(params: {
+  limit?: number;
+  source?: string;
+  childId?: string;
+  level?: string;
+  since?: string;
+}): Promise<SystemLogRecord[]> {
+  const search = new URLSearchParams({ limit: String(params.limit ?? 500) });
+  if (params.source) {
+    search.set('source', params.source);
+  }
+  if (params.childId) {
+    search.set('child_id', params.childId);
+  }
+  if (params.level) {
+    search.set('level', params.level);
+  }
+  if (params.since) {
+    search.set('since', params.since);
+  }
+  return apiFetch<SystemLogRecord[]>(`/sync/export/logs?${search.toString()}`);
 }

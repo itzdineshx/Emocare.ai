@@ -136,6 +136,44 @@ class ChatMessageOut(BaseModel):
     created_at: datetime
 
 
+class ConversationThreadOut(BaseModel):
+    source: str
+    session_id: str
+    child_id: Optional[str] = None
+    total_messages: int
+    last_message_at: datetime
+    last_role: str
+    last_message_preview: str
+
+
+class SystemLogIn(BaseModel):
+    source: str = Field(min_length=1, max_length=120)
+    level: Literal["debug", "info", "warning", "error"] = "info"
+    category: str = Field(default="system", min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=2000)
+    child_id: Optional[str] = Field(default=None, max_length=120)
+    parent_id: Optional[str] = Field(default=None, max_length=120)
+    user_id: Optional[str] = Field(default=None, max_length=120)
+    session_id: Optional[str] = Field(default=None, max_length=120)
+    context: Optional[dict] = None
+
+
+class SystemLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source: str
+    level: str
+    category: str
+    message: str
+    child_id: Optional[str] = None
+    parent_id: Optional[str] = None
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    context: Optional[dict] = None
+    created_at: datetime
+
+
 class DashboardSummaryOut(BaseModel):
     source: Optional[str]
     total_events: int
@@ -150,6 +188,10 @@ class SyncPullRequest(BaseModel):
     url: str = Field(min_length=1)
     api_key: Optional[str] = None
     since: Optional[datetime] = None
+    include_chat: bool = False
+    include_logs: bool = False
+    chat_url: Optional[str] = None
+    logs_url: Optional[str] = None
 
 
 class SyncPullResponse(BaseModel):

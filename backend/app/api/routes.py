@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -13,6 +15,7 @@ from app.schemas import (
     AuthTokenOut,
     ChatMessageIn,
     ChatMessageOut,
+    ConversationThreadOut,
     CreateChildIn,
     DashboardSummaryOut,
     EmotionBulkIn,
@@ -21,6 +24,8 @@ from app.schemas import (
     EmotionEventOut,
     LoginIn,
     RegisterParentIn,
+    SystemLogIn,
+    SystemLogOut,
     SyncPullRequest,
     SyncPullResponse,
     UserOut,
@@ -34,8 +39,11 @@ from app.services.auth_service import (
 from app.services.sync_service import (
     bulk_upsert_events,
     create_chat_message,
+    create_system_log,
     get_dashboard_summary,
+    list_conversation_threads,
     list_chat_messages,
+    list_recent_logs,
     list_recent_events,
     pull_and_sync_remote,
     upsert_emotion_event,
@@ -130,6 +138,21 @@ async def ingest_event(
             payload.parent_id = user_id
 
     event, _ = await upsert_emotion_event(db, payload)
+    if current_user:
+        await create_system_log(
+            db,
+            SystemLogIn(
+                source=payload.source,
+                level="info",
+                category="emotion_event",
+                message=f"Emotion event ingested ({payload.emotion})",
+                child_id=payload.child_id,
+                parent_id=payload.parent_id,
+                user_id=payload.user_id,
+                session_id=payload.session_id,
+                context={"confidence": payload.confidence},
+            ),
+        )
     return EmotionEventOut.model_validate(event)
 
 
@@ -209,6 +232,21 @@ async def create_message(
             payload.child_id = resolved_child_id
 
     message = await create_chat_message(db, payload)
+    if current_user:
+        await create_system_log(
+            db,
+            SystemLogIn(
+                source=payload.source,
+                level="info",
+                category="chat_message",
+                message=f"Chat message stored ({payload.role})",
+                child_id=payload.child_id,
+                parent_id=current_user.get("user_id") if current_user.get("role") == "parent" else current_user.get("parent_id"),
+                user_id=current_user.get("user_id"),
+                session_id=payload.session_id,
+                context={"text_length": len(payload.text)},
+            ),
+        )
     return ChatMessageOut.model_validate(message)
 
 
@@ -217,13 +255,139 @@ async def get_messages(
     source: str,
     session_id: str,
     child_id: str | None = None,
+    since: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict | None = Depends(get_current_user_optional),
 ) -> list[ChatMessageOut]:
     _, child_scope_ids = await resolve_child_scope(db, current_user, child_id)
-    messages = await list_chat_messages(db, source=source, session_id=session_id, limit=limit, child_ids=child_scope_ids)
+    messages = await list_chat_messages(
+        db,
+        source=source,
+        session_id=session_id,
+        limit=limit,
+        child_ids=child_scope_ids,
+        since=since,
+    )
     return [ChatMessageOut.model_validate(message) for message in messages]
+
+
+@router.get("/chat/conversations", response_model=list[ConversationThreadOut])
+async def get_conversations(
+    source: str | None = None,
+    child_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> list[ConversationThreadOut]:
+    _, child_scope_ids = await resolve_child_scope(db, current_user, child_id)
+    rows = await list_conversation_threads(db, source=source, limit=limit, child_ids=child_scope_ids)
+    return [ConversationThreadOut.model_validate(row) for row in rows]
+
+
+@router.post("/logs", response_model=SystemLogOut)
+async def create_log(
+    payload: SystemLogIn,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> SystemLogOut:
+    if current_user:
+        role = current_user.get("role")
+        if role == "child":
+            payload.child_id = current_user.get("user_id")
+            payload.parent_id = current_user.get("parent_id")
+            payload.user_id = current_user.get("user_id")
+        elif role == "parent":
+            resolved_child_id, _ = await resolve_child_scope(db, current_user, payload.child_id)
+            payload.child_id = resolved_child_id
+            payload.parent_id = current_user.get("user_id")
+            payload.user_id = current_user.get("user_id")
+
+    log_doc = await create_system_log(db, payload)
+    return SystemLogOut.model_validate(log_doc)
+
+
+@router.get("/logs/recent", response_model=list[SystemLogOut])
+async def get_logs(
+    source: str | None = None,
+    child_id: str | None = None,
+    level: str | None = None,
+    session_id: str | None = None,
+    since: datetime | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> list[SystemLogOut]:
+    _, child_scope_ids = await resolve_child_scope(db, current_user, child_id)
+    logs = await list_recent_logs(
+        db,
+        source=source,
+        limit=limit,
+        level=level,
+        session_id=session_id,
+        child_ids=child_scope_ids,
+        since=since,
+    )
+    return [SystemLogOut.model_validate(log) for log in logs]
+
+
+@router.get("/sync/export/events", response_model=list[EmotionEventOut], tags=["sync"])
+async def sync_export_events(
+    source: str | None = None,
+    child_id: str | None = None,
+    since: datetime | None = None,
+    limit: int = Query(default=500, ge=1, le=2000),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> list[EmotionEventOut]:
+    _, child_scope_ids = await resolve_child_scope(db, current_user, child_id)
+    events = await list_recent_events(db, source=source, limit=limit, child_ids=child_scope_ids, since=since)
+    return [EmotionEventOut.model_validate(event) for event in events]
+
+
+@router.get("/sync/export/chat", response_model=list[ChatMessageOut], tags=["sync"])
+async def sync_export_chat(
+    source: str,
+    session_id: str | None = None,
+    child_id: str | None = None,
+    since: datetime | None = None,
+    limit: int = Query(default=500, ge=1, le=2000),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> list[ChatMessageOut]:
+    _, child_scope_ids = await resolve_child_scope(db, current_user, child_id)
+    messages = await list_chat_messages(
+        db,
+        source=source,
+        session_id=session_id,
+        limit=limit,
+        child_ids=child_scope_ids,
+        since=since,
+    )
+    return [ChatMessageOut.model_validate(message) for message in messages]
+
+
+@router.get("/sync/export/logs", response_model=list[SystemLogOut], tags=["sync"])
+async def sync_export_logs(
+    source: str | None = None,
+    child_id: str | None = None,
+    level: str | None = None,
+    since: datetime | None = None,
+    limit: int = Query(default=500, ge=1, le=2000),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> list[SystemLogOut]:
+    _, child_scope_ids = await resolve_child_scope(db, current_user, child_id)
+    logs = await list_recent_logs(
+        db,
+        source=source,
+        limit=limit,
+        level=level,
+        session_id=None,
+        child_ids=child_scope_ids,
+        since=since,
+    )
+    return [SystemLogOut.model_validate(log) for log in logs]
 
 
 @router.post("/sync/pull", response_model=SyncPullResponse)
@@ -234,7 +398,36 @@ async def sync_pull(
 ) -> SyncPullResponse:
     try:
         result = await pull_and_sync_remote(db, payload)
+        await create_system_log(
+            db,
+            SystemLogIn(
+                source=payload.source,
+                level="info",
+                category="sync_pull",
+                message="Remote sync pull completed",
+                parent_id=current_parent.get("user_id"),
+                user_id=current_parent.get("user_id"),
+                context={
+                    "fetched": result.fetched,
+                    "inserted": result.inserted,
+                    "updated": result.updated,
+                    "include_chat": payload.include_chat,
+                    "include_logs": payload.include_logs,
+                },
+            ),
+        )
     except Exception as exc:
+        await create_system_log(
+            db,
+            SystemLogIn(
+                source=payload.source,
+                level="error",
+                category="sync_pull",
+                message=f"Remote sync pull failed: {exc}",
+                parent_id=current_parent.get("user_id"),
+                user_id=current_parent.get("user_id"),
+            ),
+        )
         raise HTTPException(status_code=400, detail=f"Sync failed: {exc}") from exc
 
     return result

@@ -45,6 +45,13 @@ async def init_mongo() -> None:
 
     await db.chat_messages.create_index([("source", 1), ("session_id", 1), ("created_at", 1)], name="idx_chat_session")
     await db.chat_messages.create_index([("child_id", 1), ("created_at", 1)], name="idx_chat_child_created")
+    await db.chat_messages.create_index([("source", 1), ("created_at", -1)], name="idx_chat_source_created")
+
+    await db.system_logs.create_index([("source", 1), ("created_at", -1)], name="idx_logs_source_created")
+    await db.system_logs.create_index([("child_id", 1), ("created_at", -1)], name="idx_logs_child_created")
+    await db.system_logs.create_index([("level", 1), ("created_at", -1)], name="idx_logs_level_created")
+    await db.system_logs.create_index([("session_id", 1), ("created_at", -1)], name="idx_logs_session_created")
+
     await db.sync_cursors.create_index([("source", 1)], unique=True, name="uq_source")
 
     await db.users.create_index([("email", 1)], unique=True, name="uq_user_email")
