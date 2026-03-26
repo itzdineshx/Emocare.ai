@@ -166,7 +166,7 @@ export default function LiveMonitor() {
                 - Primary Emotion: Choose from [Happy, Sad, Neutral, Angry, Surprised, Fearful, Disgusted]
                 - Specific Gesture: (e.g., Waving, Hands on face, Crossed arms, Thumbs up, Pointing, Fidgeting, None)
                 - Confidence Score: (0-100)
-                - Zara Response: A very short, gentle, and empathetic sentence Zara should say to the child right now based on their emotion and speech. Keep it under 15 words.` }
+                - Zara Response: A very short, gentle, and empathetic sentence Zara should say to the child right now based on their emotion and speech. Keep it under 15 words. Respond ONLY in English.` }
             ]
           },
           config: { 
@@ -296,7 +296,8 @@ export default function LiveMonitor() {
         3. If they are Happy, share their joy with a soft, cheerful tone.
         4. Keep responses short, simple, and very encouraging.
         5. Always prioritize making the child feel safe and loved.
-        6. Acknowledge their gesture if it's meaningful (like waving).`;
+        6. Acknowledge their gesture if it's meaningful (like waving).
+        7. Respond ONLY in English.`;
 
       const result = await retryAI(async () => {
         return await ai.models.generateContent({

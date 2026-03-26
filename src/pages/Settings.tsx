@@ -35,54 +35,54 @@ export default function Settings() {
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <section className="space-y-4">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-2">பொதுவானவை</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-2">General</h3>
         <div className="space-y-3">
           <SettingItem 
             icon={Bell} 
-            title="அறிவிப்புகள்" 
-            description="உணர்ச்சி மாற்றங்களுக்கான எச்சரிக்கைகளைப் பெறுங்கள்" 
+            title="Notifications" 
+            description="Receive alerts for emotional changes" 
             toggle="on"
           />
           <SettingItem 
             icon={Volume2} 
-            title="சாரா குரல்" 
-            description="சாராவிற்கு உரையிலிருந்து பேச்சு வசதியை இயக்கவும்" 
+            title="Zara Voice" 
+            description="Enable text-to-speech for Zara" 
             toggle="on"
           />
           <SettingItem 
             icon={Globe} 
-            title="மொழி" 
-            description="கணினி மொழி தேர்வு" 
+            title="Language" 
+            description="English (Default)" 
           />
         </div>
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-2">தனியுரிமை மற்றும் பாதுகாப்பு</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-2">Privacy & Security</h3>
         <div className="space-y-3">
           <SettingItem 
             icon={Shield} 
-            title="தனியுரிமை பயன்முறை" 
-            description="செயலில் இல்லாதபோது வீடியோ ஊட்டத்தை மங்கலாக்கு" 
+            title="Privacy Mode" 
+            description="Blur video feed when not active" 
             toggle="off"
           />
           <SettingItem 
             icon={Database} 
-            title="தரவு சேமிப்பு" 
-            description="30 நாட்களுக்கு உணர்ச்சி வரலாற்றை வைத்திருங்கள்" 
+            title="Data Storage" 
+            description="Keep emotion history for 30 days" 
             toggle="on"
           />
           <SettingItem 
             icon={Eye} 
-            title="பெற்றோர் கட்டுப்பாடுகள்" 
-            description="அணுகல் மற்றும் கட்டுப்பாடுகளை நிர்வகிக்கவும்" 
+            title="Parental Controls" 
+            description="Manage access and restrictions" 
           />
         </div>
       </section>
 
       <div className="pt-8">
         <button className="w-full py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl border border-rose-100 hover:bg-rose-100 transition-colors">
-          அனைத்து தரவையும் மீட்டமை
+          Reset All Data
         </button>
       </div>
     </div>

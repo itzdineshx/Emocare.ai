@@ -95,7 +95,8 @@ export default function AICompanion() {
           2. If they look Sad, be very comforting and ask "Are you okay, friend?".
           3. If they are Happy, share their joy with a soft, cheerful tone.
           4. Keep responses short, simple, and very encouraging.
-          5. Always prioritize making the child feel safe and loved.`,
+          5. Always prioritize making the child feel safe and loved.
+          6. Respond ONLY in English.`,
         });
       });
 
