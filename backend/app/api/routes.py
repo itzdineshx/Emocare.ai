@@ -73,7 +73,20 @@ async def auth_register_parent(payload: RegisterParentIn, db: AsyncIOMotorDataba
 
 @router.post("/auth/login", response_model=AuthTokenOut, tags=["auth"])
 async def auth_login(payload: LoginIn, db: AsyncIOMotorDatabase = Depends(get_database)) -> AuthTokenOut:
-    user = await authenticate_user(db, email=payload.email, password=payload.password)
+    if not payload.email and not payload.username:
+        raise HTTPException(status_code=400, detail="Provide email or username")
+
+    if payload.username and not payload.parent_id:
+        raise HTTPException(status_code=400, detail="Parent ID is required for child username login")
+
+    user = await authenticate_user(
+        db,
+        email=payload.email,
+        username=payload.username,
+        parent_id=payload.parent_id,
+        password=payload.password,
+        parent_email=payload.parent_email,
+    )
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -101,7 +114,11 @@ async def auth_create_child(
             db,
             parent_user_id=current_parent["user_id"],
             name=payload.name,
+            username=payload.username,
             email=payload.email,
+            age=payload.age,
+            grade=payload.grade,
+            interests=payload.interests,
             password=payload.password,
         )
     except ValueError as exc:

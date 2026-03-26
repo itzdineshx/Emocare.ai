@@ -18,9 +18,13 @@ export interface UserRecord {
   id: string;
   user_id: string;
   name: string;
-  email: string;
+  email?: string;
+  username?: string | null;
   role: UserRole;
   parent_id?: string | null;
+  age?: number | null;
+  grade?: string | null;
+  interests?: string[];
   created_at: string;
 }
 
@@ -175,7 +179,13 @@ export async function registerParent(payload: {
   });
 }
 
-export async function login(payload: { email: string; password: string }): Promise<AuthTokenResponse> {
+export async function login(payload: {
+  email?: string;
+  username?: string;
+  parent_id?: string;
+  password: string;
+  parent_email?: string;
+}): Promise<AuthTokenResponse> {
   return apiFetch<AuthTokenResponse>('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -189,7 +199,11 @@ export async function getMe(): Promise<UserRecord> {
 
 export async function createChild(payload: {
   name: string;
-  email: string;
+  username: string;
+  email?: string;
+  age?: number;
+  grade?: string;
+  interests?: string[];
   password: string;
 }): Promise<UserRecord> {
   return apiFetch<UserRecord>('/auth/children', {

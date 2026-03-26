@@ -18,11 +18,25 @@ interface AuthContextValue {
   children: UserRecord[];
   selectedChildId: string | null;
   isLoading: boolean;
-  loginUser: (email: string, password: string) => Promise<void>;
+  loginUser: (payload: {
+    email?: string;
+    username?: string;
+    parentId?: string;
+    password: string;
+    parentEmail?: string;
+  }) => Promise<void>;
   registerParentUser: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshChildren: () => Promise<void>;
-  createChildUser: (name: string, email: string, password: string) => Promise<void>;
+  createChildUser: (payload: {
+    name: string;
+    username: string;
+    email?: string;
+    age?: number;
+    grade?: string;
+    interests?: string[];
+    password: string;
+  }) => Promise<void>;
   setSelectedChildId: (childId: string | null) => void;
 }
 
@@ -70,8 +84,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginUser = async (email: string, password: string) => {
-    const auth = await login({ email, password });
+  const loginUser = async (payload: {
+    email?: string;
+    username?: string;
+    parentId?: string;
+    password: string;
+    parentEmail?: string;
+  }) => {
+    const auth = await login({
+      email: payload.email,
+      username: payload.username,
+      parent_id: payload.parentId,
+      password: payload.password,
+      parent_email: payload.parentEmail,
+    });
     await applyLogin(auth);
   };
 
@@ -81,8 +107,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await applyLogin(auth);
   };
 
-  const createChildUser = async (name: string, email: string, password: string) => {
-    await createChild({ name, email, password });
+  const createChildUser = async (payload: {
+    name: string;
+    username: string;
+    email?: string;
+    age?: number;
+    grade?: string;
+    interests?: string[];
+    password: string;
+  }) => {
+    await createChild(payload);
     await refreshChildren();
   };
 

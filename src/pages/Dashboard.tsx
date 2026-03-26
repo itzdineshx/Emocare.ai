@@ -5,11 +5,11 @@ import {
 } from 'recharts';
 import { 
   Smile, 
-  Frown, 
-  Meh, 
   AlertCircle, 
   TrendingUp,
-  BrainCircuit
+  BrainCircuit,
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/src/lib/utils';
@@ -34,18 +34,14 @@ export default function Dashboard() {
     children,
     selectedChildId,
     setSelectedChildId,
-    isLoading: isAuthLoading,
-    loginUser,
-    registerParentUser,
     createChildUser,
   } = useAuth();
 
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authName, setAuthName] = useState('');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
   const [childName, setChildName] = useState('');
-  const [childEmail, setChildEmail] = useState('');
+  const [childUsername, setChildUsername] = useState('');
+  const [childAge, setChildAge] = useState('');
+  const [childGrade, setChildGrade] = useState('');
+  const [childInterests, setChildInterests] = useState('');
   const [childPassword, setChildPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
@@ -111,32 +107,27 @@ export default function Dashboard() {
     loadData();
   }, [user, selectedChildId]);
 
-  const handleAuthSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setAuthError(null);
-    setIsSubmittingAuth(true);
-    try {
-      if (authMode === 'register') {
-        await registerParentUser(authName, authEmail, authPassword);
-      } else {
-        await loginUser(authEmail, authPassword);
-      }
-      setAuthPassword('');
-    } catch (error: any) {
-      setAuthError(error?.message || 'Authentication failed');
-    } finally {
-      setIsSubmittingAuth(false);
-    }
-  };
-
   const handleCreateChild = async (event: React.FormEvent) => {
     event.preventDefault();
     setAuthError(null);
     setIsSubmittingAuth(true);
     try {
-      await createChildUser(childName, childEmail, childPassword);
+      await createChildUser({
+        name: childName,
+        username: childUsername,
+        age: childAge ? Number(childAge) : undefined,
+        grade: childGrade || undefined,
+        interests: childInterests
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
+        password: childPassword,
+      });
       setChildName('');
-      setChildEmail('');
+      setChildUsername('');
+      setChildAge('');
+      setChildGrade('');
+      setChildInterests('');
       setChildPassword('');
     } catch (error: any) {
       setAuthError(error?.message || 'Failed to create child account');
@@ -144,75 +135,6 @@ export default function Dashboard() {
       setIsSubmittingAuth(false);
     }
   };
-
-  if (!user) {
-    return (
-      <div className="max-w-md mx-auto bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-slate-900">Parent & Child Login</h2>
-          <p className="text-sm text-slate-500">Sign in with parent or child credentials to sync the right data.</p>
-        </div>
-
-        <div className="flex gap-2 bg-slate-100 rounded-xl p-1">
-          <button
-            type="button"
-            onClick={() => setAuthMode('login')}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-              authMode === 'login' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            Login
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode('register')}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
-              authMode === 'register' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            Register Parent
-          </button>
-        </div>
-
-        <form className="space-y-4" onSubmit={handleAuthSubmit}>
-          {authMode === 'register' && (
-            <input
-              type="text"
-              value={authName}
-              onChange={(e) => setAuthName(e.target.value)}
-              placeholder="Parent name"
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm"
-              required
-            />
-          )}
-          <input
-            type="email"
-            value={authEmail}
-            onChange={(e) => setAuthEmail(e.target.value)}
-            placeholder="Email"
-            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm"
-            required
-          />
-          <input
-            type="password"
-            value={authPassword}
-            onChange={(e) => setAuthPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm"
-            required
-          />
-          <button
-            type="submit"
-            disabled={isSubmittingAuth || isAuthLoading}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold disabled:opacity-50"
-          >
-            {authMode === 'register' ? 'Create Parent Account' : 'Login'}
-          </button>
-        </form>
-        {authError && <p className="text-sm text-rose-600">{authError}</p>}
-      </div>
-    );
-  }
 
   const chartData = history.slice(-10).map(h => ({
     time: new Date(h.detected_at || h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -282,14 +204,61 @@ export default function Dashboard() {
     return translations[emotion] || emotion;
   };
 
+  const coachTips = {
+    Happy: 'You are doing amazing. Keep sharing what made you smile today.',
+    Sad: 'It is okay to feel sad. Try drawing your feelings for a few minutes.',
+    Neutral: 'A short game or music break can help your mood feel lighter.',
+    Angry: 'Take five deep breaths slowly, then talk to a trusted adult.',
+    Surprised: 'That was unexpected. Tell what happened in your own words.',
+    Fearful: 'You are safe. Hold your favorite toy and breathe slowly.',
+    Disgusted: 'Take a quick pause and move to a place that feels comfortable.',
+    None: 'Start a live monitor session and I will guide you step by step.',
+  };
+
+  const childTip = coachTips[stats.primary as keyof typeof coachTips] || coachTips.None;
+  const happyScore = pieData.find((item) => item.name === 'Happy')?.value || 0;
+  const calmScore = (pieData.find((item) => item.name === 'Neutral')?.value || 0) + happyScore;
+  const recentMoments = history.slice(-3).reverse();
+
   return (
     <div className="space-y-8">
-      {user.role === 'parent' && (
+      {user?.role === 'child' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-800">My Profile</h3>
+          <p className="text-sm text-slate-500 mt-1">Your profile details stored in EmoCare.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <p className="text-xs text-slate-500">Username</p>
+              <p className="text-sm font-semibold text-slate-800 mt-1">{user.username || '-'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <p className="text-xs text-slate-500">Parent ID</p>
+              <p className="text-sm font-semibold text-slate-800 mt-1">{user.parent_id || '-'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <p className="text-xs text-slate-500">Age</p>
+              <p className="text-sm font-semibold text-slate-800 mt-1">{user.age || '-'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <p className="text-xs text-slate-500">Grade</p>
+              <p className="text-sm font-semibold text-slate-800 mt-1">{user.grade || '-'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 md:col-span-2 lg:col-span-1">
+              <p className="text-xs text-slate-500">Interests</p>
+              <p className="text-sm font-semibold text-slate-800 mt-1">
+                {user.interests && user.interests.length > 0 ? user.interests.join(', ') : '-'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {user?.role === 'parent' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-800">Child Selector</h3>
-              <p className="text-sm text-slate-500">Choose a child profile to view scoped synced data.</p>
+              <p className="text-sm text-slate-500">Choose a child profile to view scoped synced data. Parent ID: {user.user_id}</p>
             </div>
             <select
               value={selectedChildId || ''}
@@ -299,13 +268,13 @@ export default function Dashboard() {
               {children.length === 0 && <option value="">No child accounts yet</option>}
               {children.map((child) => (
                 <option key={child.user_id} value={child.user_id}>
-                  {child.name} ({child.email})
+                  {child.name} ({child.username || child.email || child.user_id})
                 </option>
               ))}
             </select>
           </div>
 
-          <form onSubmit={handleCreateChild} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <form onSubmit={handleCreateChild} className="grid grid-cols-1 md:grid-cols-6 gap-3">
             <input
               type="text"
               value={childName}
@@ -315,12 +284,35 @@ export default function Dashboard() {
               required
             />
             <input
-              type="email"
-              value={childEmail}
-              onChange={(e) => setChildEmail(e.target.value)}
-              placeholder="Child email"
+              type="text"
+              value={childUsername}
+              onChange={(e) => setChildUsername(e.target.value)}
+              placeholder="Child username"
               className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
               required
+            />
+            <input
+              type="number"
+              min={1}
+              max={18}
+              value={childAge}
+              onChange={(e) => setChildAge(e.target.value)}
+              placeholder="Age"
+              className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
+            />
+            <input
+              type="text"
+              value={childGrade}
+              onChange={(e) => setChildGrade(e.target.value)}
+              placeholder="Grade"
+              className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
+            />
+            <input
+              type="text"
+              value={childInterests}
+              onChange={(e) => setChildInterests(e.target.value)}
+              placeholder="Interests (comma separated)"
+              className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
             />
             <input
               type="password"
@@ -495,6 +487,49 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {user?.role === 'child' && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          <div className="xl:col-span-2 bg-gradient-to-br from-cyan-500 to-blue-600 p-8 rounded-3xl text-white shadow-xl shadow-cyan-200/70">
+            <div className="flex items-center gap-3 mb-4">
+              <Sparkles className="w-6 h-6" />
+              <h2 className="text-xl font-bold">My Mood Coach</h2>
+            </div>
+            <p className="text-cyan-50 text-sm mb-5">Personal tip based on your latest mood trend.</p>
+            <p className="bg-white/15 rounded-2xl p-4 text-sm leading-relaxed">{childTip}</p>
+            <div className="grid grid-cols-2 gap-3 mt-5">
+              <div className="bg-white/15 rounded-2xl p-3">
+                <p className="text-xs text-cyan-100">Joy + Calm Score</p>
+                <p className="text-2xl font-bold">{calmScore}%</p>
+              </div>
+              <div className="bg-white/15 rounded-2xl p-3">
+                <p className="text-xs text-cyan-100">Positive Moments</p>
+                <p className="text-2xl font-bold">{happyScore}%</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              <h3 className="text-lg font-bold text-slate-800">Recent Moments</h3>
+            </div>
+            <div className="space-y-3">
+              {recentMoments.length === 0 && (
+                <p className="text-sm text-slate-500">No moments yet. Start Live Monitor to fill this list.</p>
+              )}
+              {recentMoments.map((moment) => (
+                <div key={moment.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <p className="text-sm font-semibold text-slate-700">{translateEmotion(moment.emotion)}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {new Date(moment.detected_at || moment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {Math.round(moment.confidence)}%
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

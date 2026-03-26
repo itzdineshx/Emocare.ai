@@ -26,13 +26,20 @@ class RegisterParentIn(BaseModel):
 
 class CreateChildIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    email: str = Field(min_length=3, max_length=320)
+    username: str = Field(min_length=3, max_length=60)
+    email: Optional[str] = Field(default=None, min_length=3, max_length=320)
+    age: Optional[int] = Field(default=None, ge=1, le=18)
+    grade: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    interests: list[str] = Field(default_factory=list)
     password: str = Field(min_length=8, max_length=128)
 
 
 class LoginIn(BaseModel):
-    email: str = Field(min_length=3, max_length=320)
+    email: Optional[str] = Field(default=None, min_length=3, max_length=320)
+    username: Optional[str] = Field(default=None, min_length=3, max_length=60)
+    parent_id: Optional[str] = Field(default=None, min_length=3, max_length=120)
     password: str = Field(min_length=8, max_length=128)
+    parent_email: Optional[str] = Field(default=None, min_length=3, max_length=320)
 
 
 class UserOut(BaseModel):
@@ -42,6 +49,10 @@ class UserOut(BaseModel):
     email: str
     role: UserRole
     parent_id: Optional[str] = None
+    username: Optional[str] = None
+    age: Optional[int] = None
+    grade: Optional[str] = None
+    interests: list[str] = Field(default_factory=list)
     created_at: datetime
 
 

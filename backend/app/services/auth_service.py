@@ -46,19 +46,44 @@ async def create_child_account(
     *,
     parent_user_id: str,
     name: str,
-    email: str,
+    username: str,
+    email: str | None,
+    age: int | None,
+    grade: str | None,
+    interests: list[str] | None,
     password: str,
 ) -> dict:
-    normalized_email = email.lower().strip()
-    if await get_user_by_email(db, normalized_email):
-        raise ValueError("Email is already registered")
+    normalized_username = username.lower().strip()
+    existing_username = await db.users.find_one(
+        {
+            "role": "child",
+            "parent_id": parent_user_id,
+            "username": normalized_username,
+        }
+    )
+    if existing_username:
+        raise ValueError("Username is already used under this parent")
+
+    normalized_email: str
+    if email:
+        normalized_email = email.lower().strip()
+        if await get_user_by_email(db, normalized_email):
+            raise ValueError("Email is already registered")
+    else:
+        normalized_email = f"{normalized_username}.{int(datetime.now(timezone.utc).timestamp())}@child.local"
+
+    normalized_interests = [item.strip() for item in (interests or []) if item and item.strip()]
 
     child_doc = {
         "user_id": f"child-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
         "name": name.strip(),
+        "username": normalized_username,
         "email": normalized_email,
         "role": "child",
         "parent_id": parent_user_id,
+        "age": age,
+        "grade": grade.strip() if grade else None,
+        "interests": normalized_interests,
         "password_hash": hash_password(password),
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -68,8 +93,46 @@ async def create_child_account(
     return _serialize_user(created or child_doc)
 
 
-async def authenticate_user(db: AsyncIOMotorDatabase, *, email: str, password: str) -> dict | None:
-    user = await get_user_by_email(db, email)
+async def authenticate_user(
+    db: AsyncIOMotorDatabase,
+    *,
+    email: str | None,
+    username: str | None,
+    parent_id: str | None,
+    password: str,
+    parent_email: str | None = None,
+) -> dict | None:
+    user = None
+
+    if username and parent_id:
+        user = await db.users.find_one(
+            {
+                "role": "child",
+                "username": username.lower().strip(),
+                "parent_id": parent_id.strip(),
+            }
+        )
+
+    elif email and parent_email:
+        normalized_email = email.lower().strip()
+
+        normalized_parent_email = parent_email.lower().strip()
+        parent = await db.users.find_one({"email": normalized_parent_email, "role": "parent"})
+        if not parent:
+            return None
+
+        user = await db.users.find_one(
+            {
+                "email": normalized_email,
+                "role": "child",
+                "parent_id": parent.get("user_id"),
+            }
+        )
+
+    elif email:
+        normalized_email = email.lower().strip()
+        user = await get_user_by_email(db, normalized_email)
+
     if not user:
         return None
 
