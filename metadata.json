@@ -1,0 +1,9 @@
+{
+  "name": "EmoCare AI",
+  "description": "Child Emotion Intelligence System for monitoring and AI interaction.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
