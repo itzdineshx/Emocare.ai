@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.api.deps import (
@@ -22,6 +22,8 @@ from app.schemas import (
     EmotionBulkResult,
     EmotionEventIn,
     EmotionEventOut,
+    LiveStreamPacketIn,
+    LiveStreamPacketOut,
     LoginIn,
     RegisterParentIn,
     SystemLogIn,
@@ -38,6 +40,7 @@ from app.services.auth_service import (
 )
 from app.services.sync_service import (
     bulk_upsert_events,
+    create_live_stream_packet,
     create_chat_message,
     create_system_log,
     get_dashboard_summary,
@@ -45,9 +48,11 @@ from app.services.sync_service import (
     list_chat_messages,
     list_recent_logs,
     list_recent_events,
+    list_recent_stream_packets,
     pull_and_sync_remote,
     upsert_emotion_event,
 )
+from app.services.realtime_stream import realtime_stream_hub
 
 router = APIRouter(prefix="/api/v1", tags=["sync"])
 
@@ -55,6 +60,77 @@ router = APIRouter(prefix="/api/v1", tags=["sync"])
 @router.get("/health", tags=["health"])
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.websocket("/stream/ws/{source}")
+async def stream_websocket(source: str, websocket: WebSocket) -> None:
+    await realtime_stream_hub.connect(source, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data.get("type") == "ping":
+                await websocket.send_json(realtime_stream_hub.heartbeat_payload(source))
+    except WebSocketDisconnect:
+        await realtime_stream_hub.disconnect(source, websocket)
+    except Exception:
+        await realtime_stream_hub.disconnect(source, websocket)
+
+
+@router.post("/stream/publish", response_model=LiveStreamPacketOut, tags=["stream"])
+async def stream_publish(
+    payload: LiveStreamPacketIn,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> LiveStreamPacketOut:
+    if current_user:
+        role = current_user.get("role")
+        if role == "child":
+            payload.child_id = current_user.get("user_id")
+            payload.parent_id = current_user.get("parent_id")
+            payload.user_id = current_user.get("user_id")
+        elif role == "parent":
+            resolved_child_id, _ = await resolve_child_scope(db, current_user, payload.child_id)
+            payload.child_id = resolved_child_id
+            payload.parent_id = current_user.get("user_id")
+            payload.user_id = current_user.get("user_id")
+
+    packet = await create_live_stream_packet(db, payload)
+    await realtime_stream_hub.broadcast(
+        payload.source,
+        {
+            "type": "stream.packet",
+            "stream_type": payload.stream_type,
+            "payload": packet,
+        },
+    )
+    return LiveStreamPacketOut.model_validate(packet)
+
+
+@router.get("/stream/recent", response_model=list[LiveStreamPacketOut], tags=["stream"])
+async def stream_recent(
+    source: str | None = None,
+    stream_type: str | None = Query(default=None, pattern="^(camera|voice|emotion)$"),
+    child_id: str | None = None,
+    since: datetime | None = None,
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict | None = Depends(get_current_user_optional),
+) -> list[LiveStreamPacketOut]:
+    parent_scope_id: str | None = None
+    if current_user and current_user.get("role") == "parent":
+        parent_scope_id = current_user.get("user_id")
+
+    _, child_scope_ids = await resolve_child_scope(db, current_user, child_id)
+    rows = await list_recent_stream_packets(
+        db,
+        source=source,
+        stream_type=stream_type,
+        limit=limit,
+        child_ids=child_scope_ids,
+        parent_id=parent_scope_id,
+        since=since,
+    )
+    return [LiveStreamPacketOut.model_validate(row) for row in rows]
 
 
 @router.post("/auth/register/parent", response_model=UserOut, tags=["auth"])
@@ -155,6 +231,13 @@ async def ingest_event(
             payload.parent_id = user_id
 
     event, _ = await upsert_emotion_event(db, payload)
+    await realtime_stream_hub.broadcast(
+        payload.source,
+        {
+            "type": "emotion.update",
+            "payload": event,
+        },
+    )
     if current_user:
         await create_system_log(
             db,
@@ -249,6 +332,13 @@ async def create_message(
             payload.child_id = resolved_child_id
 
     message = await create_chat_message(db, payload)
+    await realtime_stream_hub.broadcast(
+        payload.source,
+        {
+            "type": "voice.update",
+            "payload": message,
+        },
+    )
     if current_user:
         await create_system_log(
             db,
@@ -321,6 +411,13 @@ async def create_log(
             payload.user_id = current_user.get("user_id")
 
     log_doc = await create_system_log(db, payload)
+    await realtime_stream_hub.broadcast(
+        payload.source,
+        {
+            "type": "log.update",
+            "payload": log_doc,
+        },
+    )
     return SystemLogOut.model_validate(log_doc)
 
 

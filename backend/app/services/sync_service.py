@@ -6,7 +6,15 @@ from typing import Iterable
 import httpx
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.schemas import ChatMessageIn, DashboardSummaryOut, EmotionEventIn, SyncPullRequest, SyncPullResponse, SystemLogIn
+from app.schemas import (
+    ChatMessageIn,
+    DashboardSummaryOut,
+    EmotionEventIn,
+    LiveStreamPacketIn,
+    SyncPullRequest,
+    SyncPullResponse,
+    SystemLogIn,
+)
 
 
 def _normalize_utc(dt: datetime) -> datetime:
@@ -136,6 +144,65 @@ async def create_system_log(db: AsyncIOMotorDatabase, payload: SystemLogIn) -> d
     result = await db.system_logs.insert_one(cleaned)
     created = await db.system_logs.find_one({"_id": result.inserted_id})
     return _serialize_id(created or cleaned)
+
+
+async def create_live_stream_packet(db: AsyncIOMotorDatabase, payload: LiveStreamPacketIn) -> dict:
+    packet = {
+        "source": payload.source,
+        "stream_type": payload.stream_type,
+        "session_id": payload.session_id,
+        "child_id": payload.child_id,
+        "parent_id": payload.parent_id,
+        "user_id": payload.user_id,
+        "sequence": payload.sequence,
+        "codec": payload.codec,
+        "chunk_base64": payload.chunk_base64,
+        "transcript": payload.transcript,
+        "emotion": payload.emotion,
+        "confidence": payload.confidence,
+        "captured_at": _normalize_utc(payload.captured_at),
+        "metadata": payload.metadata,
+        "created_at": datetime.now(timezone.utc),
+    }
+    cleaned = _without_none_values(packet)
+    result = await db.live_stream_packets.insert_one(cleaned)
+    created = await db.live_stream_packets.find_one({"_id": result.inserted_id})
+    return _serialize_id(created or cleaned)
+
+
+async def list_recent_stream_packets(
+    db: AsyncIOMotorDatabase,
+    source: str | None,
+    stream_type: str | None,
+    limit: int,
+    child_ids: list[str] | None = None,
+    parent_id: str | None = None,
+    since: datetime | None = None,
+) -> list[dict]:
+    query: dict = {}
+    if source:
+        query["source"] = source
+    if stream_type:
+        query["stream_type"] = stream_type
+
+    if child_ids is not None:
+        if not child_ids:
+            if parent_id:
+                query["parent_id"] = parent_id
+            else:
+                return []
+        else:
+            query["$or"] = [
+                {"child_id": {"$in": child_ids}},
+                {"parent_id": parent_id} if parent_id else {},
+            ]
+            query["$or"] = [item for item in query["$or"] if item]
+
+    if since is not None:
+        query["captured_at"] = {"$gte": _normalize_utc(since)}
+
+    docs = await db.live_stream_packets.find(query).sort("captured_at", -1).limit(limit).to_list(length=limit)
+    return [_serialize_id(doc) for doc in docs]
 
 
 async def list_chat_messages(

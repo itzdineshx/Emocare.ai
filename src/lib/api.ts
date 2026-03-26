@@ -75,6 +75,30 @@ export interface DashboardSummary {
   window_hours: number;
 }
 
+export type StreamType = 'camera' | 'voice' | 'emotion';
+
+export interface LiveStreamPacketPayload {
+  source: string;
+  stream_type: StreamType;
+  session_id?: string;
+  child_id?: string;
+  parent_id?: string;
+  user_id?: string;
+  sequence?: number;
+  codec?: string;
+  chunk_base64?: string;
+  transcript?: string;
+  emotion?: string;
+  confidence?: number;
+  captured_at: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface LiveStreamPacketRecord extends LiveStreamPacketPayload {
+  id: string;
+  created_at: string;
+}
+
 export interface ChatMessageRecord {
   id: string;
   source: string;
@@ -295,6 +319,45 @@ export async function createSystemLog(payload: SystemLogPayload): Promise<System
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+export async function publishLiveStreamPacket(payload: LiveStreamPacketPayload): Promise<LiveStreamPacketRecord> {
+  return apiFetch<LiveStreamPacketRecord>('/stream/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getRecentStreamPackets(params: {
+  source?: string;
+  streamType?: StreamType;
+  childId?: string;
+  since?: string;
+  limit?: number;
+}): Promise<LiveStreamPacketRecord[]> {
+  const search = new URLSearchParams({ limit: String(params.limit ?? 200) });
+  if (params.source) {
+    search.set('source', params.source);
+  }
+  if (params.streamType) {
+    search.set('stream_type', params.streamType);
+  }
+  if (params.childId) {
+    search.set('child_id', params.childId);
+  }
+  if (params.since) {
+    search.set('since', params.since);
+  }
+
+  return apiFetch<LiveStreamPacketRecord[]>(`/stream/recent?${search.toString()}`);
+}
+
+export function createRealtimeStreamSocket(source: string): WebSocket {
+  const url = new URL(API_BASE);
+  const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = url.host;
+  return new WebSocket(`${protocol}//${host}/api/v1/stream/ws/${encodeURIComponent(source)}`);
 }
 
 export async function getRecentLogs(params: {

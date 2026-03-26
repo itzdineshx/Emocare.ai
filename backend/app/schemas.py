@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,6 +60,44 @@ class AuthTokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class LiveStreamPacketIn(BaseModel):
+    source: str = Field(min_length=1, max_length=120)
+    stream_type: Literal["camera", "voice", "emotion"]
+    session_id: Optional[str] = Field(default=None, max_length=120)
+    child_id: Optional[str] = Field(default=None, max_length=120)
+    parent_id: Optional[str] = Field(default=None, max_length=120)
+    user_id: Optional[str] = Field(default=None, max_length=120)
+    sequence: int = Field(default=0, ge=0)
+    codec: Optional[str] = Field(default=None, max_length=120)
+    chunk_base64: Optional[str] = None
+    transcript: Optional[str] = None
+    emotion: Optional[EmotionName] = None
+    confidence: Optional[float] = Field(default=None, ge=0, le=100)
+    captured_at: datetime
+    metadata: Optional[dict[str, Any]] = None
+
+
+class LiveStreamPacketOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source: str
+    stream_type: str
+    session_id: Optional[str] = None
+    child_id: Optional[str] = None
+    parent_id: Optional[str] = None
+    user_id: Optional[str] = None
+    sequence: int
+    codec: Optional[str] = None
+    chunk_base64: Optional[str] = None
+    transcript: Optional[str] = None
+    emotion: Optional[str] = None
+    confidence: Optional[float] = None
+    captured_at: datetime
+    metadata: Optional[dict[str, Any]] = None
+    created_at: datetime
 
 
 class EmotionEventIn(BaseModel):

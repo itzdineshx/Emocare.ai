@@ -40,6 +40,49 @@ uvicorn app.main:app --reload --port 8000
 - `GET /api/v1/sync/export/chat?source=dashboard-a&since=2026-03-27T00:00:00Z`
 - `GET /api/v1/sync/export/logs?source=dashboard-a&since=2026-03-27T00:00:00Z`
 - `POST /api/v1/sync/pull`
+- `POST /api/v1/stream/publish`
+- `GET /api/v1/stream/recent?source=dashboard-a&stream_type=emotion&limit=200`
+- `WS /api/v1/stream/ws/{source}`
+
+## Real-Time Streaming (Camera, Voice, Emotion)
+
+Use these endpoints to push and receive low-latency live packets across dashboards in the same network.
+
+1. Publisher dashboard sends packets to `POST /api/v1/stream/publish`.
+2. Viewer dashboard opens WebSocket `WS /api/v1/stream/ws/{source}`.
+3. Backend broadcasts packets instantly to all websocket subscribers on that source channel.
+
+Example publish payload:
+
+```json
+{
+  "source": "dashboard-a",
+  "stream_type": "emotion",
+  "session_id": "monitor-123",
+  "child_id": "child-1700",
+  "sequence": 15,
+  "emotion": "Happy",
+  "confidence": 92,
+  "captured_at": "2026-03-27T10:30:00Z",
+  "metadata": {
+    "device": "laptop-cam"
+  }
+}
+```
+
+WebSocket receives live envelopes such as:
+
+```json
+{
+  "type": "stream.packet",
+  "stream_type": "emotion",
+  "payload": {
+    "id": "...",
+    "source": "dashboard-a",
+    "stream_type": "emotion"
+  }
+}
+```
 
 ## Example Bulk Ingest
 
