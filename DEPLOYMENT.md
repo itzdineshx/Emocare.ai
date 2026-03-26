@@ -46,3 +46,29 @@
 2. Keep OPENROUTER key secret in Vercel env, never commit to git.
 3. If Render sleeps on free tier, first request can be slow.
 4. Rotate any exposed MongoDB credentials immediately.
+
+## 5) Mother-Child Dashboard Sync
+
+Use this when two dashboards run on separate frontends/backends but should share data.
+
+Child backend (Render) env:
+
+- `CORS_ORIGINS=https://emocare-child.vercel.app,https://emocare-mother.vercel.app`
+- `AUTO_SYNC_SOURCE=dashboard-mother`
+- `AUTO_SYNC_URL=https://emocare-mother-backend.onrender.com/api/v1/events/recent?source=dashboard-mother&limit=300`
+- `SYNC_POLL_INTERVAL_SECONDS=30`
+
+Child frontend (Vercel) env:
+
+- `VITE_API_BASE_URL=https://emocare-child-backend.onrender.com`
+- `VITE_DASHBOARD_SOURCE=dashboard-child`
+
+Mother frontend should use:
+
+- `VITE_DASHBOARD_SOURCE=dashboard-mother`
+
+Notes:
+
+1. Use distinct dashboard sources to avoid collisions.
+2. If you want two-way replication, configure the mother backend with corresponding pull-sync settings that point to the child backend.
+3. Best long-term architecture is a single shared backend/database used by both frontends.

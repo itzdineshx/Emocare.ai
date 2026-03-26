@@ -17,8 +17,9 @@ async function throttleOpenRouterCalls() {
 }
 
 async function postOpenRouter(payload: Record<string, unknown>): Promise<any> {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('VITE_OPENROUTER_API_KEY is missing.');
+  const apiKey = OPENROUTER_API_KEY?.trim();
+  if (!apiKey || apiKey.includes('YOUR_OPENROUTER_API_KEY')) {
+    throw new Error('VITE_OPENROUTER_API_KEY is missing or still using the placeholder value.');
   }
 
   await throttleOpenRouterCalls();
@@ -27,7 +28,7 @@ async function postOpenRouter(payload: Record<string, unknown>): Promise<any> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       'HTTP-Referer': window.location.origin,
       'X-Title': 'EmoCare AI',
     },

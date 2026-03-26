@@ -21,6 +21,10 @@ def _serialize_id(doc: dict) -> dict:
     return serialized
 
 
+def _without_none_values(data: dict) -> dict:
+    return {key: value for key, value in data.items() if value is not None}
+
+
 async def upsert_emotion_event(db: AsyncIOMotorDatabase, payload: EmotionEventIn) -> tuple[dict, bool]:
     detected_at = _normalize_utc(payload.detected_at)
 
@@ -37,6 +41,8 @@ async def upsert_emotion_event(db: AsyncIOMotorDatabase, payload: EmotionEventIn
         "external_id": payload.external_id,
         "idempotency_key": payload.idempotency_key,
         "child_id": payload.child_id,
+        "parent_id": payload.parent_id,
+        "user_id": payload.user_id,
         "session_id": payload.session_id,
         "emotion": payload.emotion,
         "confidence": payload.confidence,
@@ -46,13 +52,20 @@ async def upsert_emotion_event(db: AsyncIOMotorDatabase, payload: EmotionEventIn
         "updated_at": datetime.now(timezone.utc),
     }
 
-    if existing is None:
-        update_data["created_at"] = datetime.now(timezone.utc)
-        result = await events.insert_one(update_data)
-        created = await events.find_one({"_id": result.inserted_id})
-        return _serialize_id(created or update_data), True
+    cleaned_update_data = _without_none_values(update_data)
+    unset_fields = {key: "" for key, value in update_data.items() if value is None}
 
-    await events.update_one({"_id": existing["_id"]}, {"$set": update_data})
+    if existing is None:
+        cleaned_update_data["created_at"] = datetime.now(timezone.utc)
+        result = await events.insert_one(cleaned_update_data)
+        created = await events.find_one({"_id": result.inserted_id})
+        return _serialize_id(created or cleaned_update_data), True
+
+    update_ops: dict[str, dict] = {"$set": cleaned_update_data}
+    if unset_fields:
+        update_ops["$unset"] = unset_fields
+
+    await events.update_one({"_id": existing["_id"]}, update_ops)
     updated = await events.find_one({"_id": existing["_id"]})
     return _serialize_id(updated or existing), False
 
@@ -75,6 +88,8 @@ async def create_chat_message(db: AsyncIOMotorDatabase, payload: ChatMessageIn) 
     message = {
         "source": payload.source,
         "session_id": payload.session_id,
+        "child_id": payload.child_id,
+        "user_id": payload.child_id,
         "role": payload.role,
         "text": payload.text,
         "emotion": payload.emotion,
@@ -85,9 +100,21 @@ async def create_chat_message(db: AsyncIOMotorDatabase, payload: ChatMessageIn) 
     return _serialize_id(created or message)
 
 
-async def list_chat_messages(db: AsyncIOMotorDatabase, source: str, session_id: str, limit: int) -> list[dict]:
+async def list_chat_messages(
+    db: AsyncIOMotorDatabase,
+    source: str,
+    session_id: str,
+    limit: int,
+    child_ids: list[str] | None = None,
+) -> list[dict]:
+    query: dict = {"source": source, "session_id": session_id}
+    if child_ids is not None:
+        if not child_ids:
+            return []
+        query["child_id"] = {"$in": child_ids}
+
     cursor = (
-        db.chat_messages.find({"source": source, "session_id": session_id})
+        db.chat_messages.find(query)
         .sort("created_at", -1)
         .limit(limit)
     )
@@ -96,21 +123,48 @@ async def list_chat_messages(db: AsyncIOMotorDatabase, source: str, session_id: 
     return [_serialize_id(doc) for doc in docs]
 
 
-async def list_recent_events(db: AsyncIOMotorDatabase, source: str | None, limit: int) -> list[dict]:
+async def list_recent_events(
+    db: AsyncIOMotorDatabase,
+    source: str | None,
+    limit: int,
+    child_ids: list[str] | None = None,
+) -> list[dict]:
     query: dict = {}
     if source:
         query["source"] = source
+
+    if child_ids is not None:
+        if not child_ids:
+            return []
+        query["child_id"] = {"$in": child_ids}
 
     docs = await db.emotion_events.find(query).sort("detected_at", -1).limit(limit).to_list(length=limit)
     return [_serialize_id(doc) for doc in docs]
 
 
-async def get_dashboard_summary(db: AsyncIOMotorDatabase, source: str | None, hours: int) -> DashboardSummaryOut:
+async def get_dashboard_summary(
+    db: AsyncIOMotorDatabase,
+    source: str | None,
+    hours: int,
+    child_ids: list[str] | None = None,
+) -> DashboardSummaryOut:
     since = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=hours)
 
     filters: dict = {"detected_at": {"$gte": since}}
     if source:
         filters["source"] = source
+
+    if child_ids is not None:
+        if not child_ids:
+            return DashboardSummaryOut(
+                source=source,
+                total_events=0,
+                primary_emotion="None",
+                avg_confidence=0.0,
+                alert_events=0,
+                window_hours=hours,
+            )
+        filters["child_id"] = {"$in": child_ids}
 
     total_events = await db.emotion_events.count_documents(filters)
 

@@ -15,6 +15,41 @@ EmotionName = Literal[
     "Disgusted",
 ]
 
+UserRole = Literal["parent", "child"]
+
+
+class RegisterParentIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class CreateChildIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginIn(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class UserOut(BaseModel):
+    id: str
+    user_id: str
+    name: str
+    email: str
+    role: UserRole
+    parent_id: Optional[str] = None
+    created_at: datetime
+
+
+class AuthTokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
 
 class EmotionEventIn(BaseModel):
     source: str = Field(min_length=1, max_length=120)
@@ -22,6 +57,8 @@ class EmotionEventIn(BaseModel):
     idempotency_key: Optional[str] = Field(default=None, max_length=120)
 
     child_id: Optional[str] = Field(default=None, max_length=120)
+    parent_id: Optional[str] = Field(default=None, max_length=120)
+    user_id: Optional[str] = Field(default=None, max_length=120)
     session_id: Optional[str] = Field(default=None, max_length=120)
     emotion: EmotionName
     confidence: float = Field(ge=0, le=100)
@@ -35,6 +72,8 @@ class EmotionEventBulkItem(BaseModel):
     idempotency_key: Optional[str] = Field(default=None, max_length=120)
 
     child_id: Optional[str] = Field(default=None, max_length=120)
+    parent_id: Optional[str] = Field(default=None, max_length=120)
+    user_id: Optional[str] = Field(default=None, max_length=120)
     session_id: Optional[str] = Field(default=None, max_length=120)
     emotion: EmotionName
     confidence: float = Field(ge=0, le=100)
@@ -48,14 +87,16 @@ class EmotionEventOut(BaseModel):
 
     id: str
     source: str
-    external_id: Optional[str]
-    idempotency_key: Optional[str]
-    child_id: Optional[str]
-    session_id: Optional[str]
+    external_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    child_id: Optional[str] = None
+    parent_id: Optional[str] = None
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
     emotion: str
     confidence: float
-    gesture: Optional[str]
-    transcript: Optional[str]
+    gesture: Optional[str] = None
+    transcript: Optional[str] = None
     detected_at: datetime
     created_at: datetime
 
@@ -75,6 +116,7 @@ class EmotionBulkResult(BaseModel):
 class ChatMessageIn(BaseModel):
     source: str = Field(min_length=1, max_length=120)
     session_id: str = Field(min_length=1, max_length=120)
+    child_id: Optional[str] = Field(default=None, max_length=120)
     role: Literal["user", "zara", "system"]
     text: str = Field(min_length=1)
     emotion: Optional[EmotionName] = None
@@ -86,9 +128,11 @@ class ChatMessageOut(BaseModel):
     id: str
     source: str
     session_id: str
+    child_id: Optional[str] = None
+    user_id: Optional[str] = None
     role: str
     text: str
-    emotion: Optional[str]
+    emotion: Optional[str] = None
     created_at: datetime
 
 
