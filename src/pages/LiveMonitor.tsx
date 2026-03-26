@@ -20,11 +20,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { createEmotionEvent, getBackendSource } from '@/src/lib/api';
 import { generateOpenRouterVisionJson, generateOpenRouterVisionText } from '@/src/lib/openrouter';
+import { useAuth } from '../lib/auth-context';
 
 // Supported emotions
 const EMOTIONS = ['Happy', 'Sad', 'Neutral', 'Angry', 'Surprised', 'Fearful', 'Disgusted'];
 
 export default function LiveMonitor() {
+  const { selectedChildId, user } = useAuth();
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isZaraSpeaking, setIsZaraSpeaking] = useState(false);
@@ -174,6 +176,7 @@ Return JSON with keys:
         await createEmotionEvent({
           source: sourceRef.current,
           idempotency_key: `${sourceRef.current}-${monitorSessionIdRef.current}-${Date.now()}`,
+          child_id: user?.role === 'parent' ? selectedChildId || undefined : undefined,
           session_id: monitorSessionIdRef.current,
           emotion: data.emotion,
           confidence: Number(data.confidence || 90),

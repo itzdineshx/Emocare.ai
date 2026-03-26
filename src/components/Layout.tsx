@@ -14,6 +14,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../lib/language-context';
+import { useAuth } from '../lib/auth-context';
 
 const localizedLabels = {
   en: {
@@ -42,6 +43,7 @@ export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const location = useLocation();
   const { language } = useLanguage();
+  const { user, logout } = useAuth();
 
   const labels = localizedLabels[language];
   const navItems = [
@@ -122,14 +124,23 @@ export default function Layout() {
           </h1>
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end">
-              <span className="text-sm font-medium">{labels.assistant}</span>
+              <span className="text-sm font-medium">{user?.name || labels.assistant}</span>
               <span className="text-xs text-green-500 flex items-center gap-1">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                {labels.online}
+                {user ? `${labels.online} • ${user.role}` : labels.online}
               </span>
             </div>
+            {user && (
+              <button
+                type="button"
+                onClick={logout}
+                className="text-xs font-semibold px-3 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Logout
+              </button>
+            )}
             <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-              Z
+              {(user?.name || 'Z').slice(0, 1).toUpperCase()}
             </div>
           </div>
         </header>

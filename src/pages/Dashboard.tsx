@@ -15,6 +15,7 @@ import { motion } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { useLanguage } from '../lib/language-context';
 import { getBackendSource, getDashboardSummary, getRecentEvents } from '@/src/lib/api';
+import { useAuth } from '../lib/auth-context';
 
 const COLORS = {
   Happy: '#3B82F6',
@@ -28,6 +29,26 @@ const COLORS = {
 
 export default function Dashboard() {
   const { language } = useLanguage();
+  const {
+    user,
+    children,
+    selectedChildId,
+    setSelectedChildId,
+    isLoading: isAuthLoading,
+    loginUser,
+    registerParentUser,
+    createChildUser,
+  } = useAuth();
+
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authName, setAuthName] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [childName, setChildName] = useState('');
+  const [childEmail, setChildEmail] = useState('');
+  const [childPassword, setChildPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [pieData, setPieData] = useState<any[]>([]);
   const [stats, setStats] = useState({
@@ -38,12 +59,24 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    if (!user) {
+      setHistory([]);
+      setPieData([]);
+      setStats({
+        primary: 'None',
+        confidence: '0%',
+        interactions: 0,
+        alerts: 0,
+      });
+      return;
+    }
+
     const loadData = async () => {
       try {
         const source = getBackendSource();
         const [recentEvents, summary] = await Promise.all([
-          getRecentEvents(100, source),
-          getDashboardSummary(24, source),
+          getRecentEvents(100, source, selectedChildId || undefined),
+          getDashboardSummary(24, source, selectedChildId || undefined),
         ]);
 
         setHistory(recentEvents);
@@ -76,7 +109,110 @@ export default function Dashboard() {
     };
 
     loadData();
-  }, []);
+  }, [user, selectedChildId]);
+
+  const handleAuthSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAuthError(null);
+    setIsSubmittingAuth(true);
+    try {
+      if (authMode === 'register') {
+        await registerParentUser(authName, authEmail, authPassword);
+      } else {
+        await loginUser(authEmail, authPassword);
+      }
+      setAuthPassword('');
+    } catch (error: any) {
+      setAuthError(error?.message || 'Authentication failed');
+    } finally {
+      setIsSubmittingAuth(false);
+    }
+  };
+
+  const handleCreateChild = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAuthError(null);
+    setIsSubmittingAuth(true);
+    try {
+      await createChildUser(childName, childEmail, childPassword);
+      setChildName('');
+      setChildEmail('');
+      setChildPassword('');
+    } catch (error: any) {
+      setAuthError(error?.message || 'Failed to create child account');
+    } finally {
+      setIsSubmittingAuth(false);
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold text-slate-900">Parent & Child Login</h2>
+          <p className="text-sm text-slate-500">Sign in with parent or child credentials to sync the right data.</p>
+        </div>
+
+        <div className="flex gap-2 bg-slate-100 rounded-xl p-1">
+          <button
+            type="button"
+            onClick={() => setAuthMode('login')}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+              authMode === 'login' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            Login
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthMode('register')}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold ${
+              authMode === 'register' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            Register Parent
+          </button>
+        </div>
+
+        <form className="space-y-4" onSubmit={handleAuthSubmit}>
+          {authMode === 'register' && (
+            <input
+              type="text"
+              value={authName}
+              onChange={(e) => setAuthName(e.target.value)}
+              placeholder="Parent name"
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm"
+              required
+            />
+          )}
+          <input
+            type="email"
+            value={authEmail}
+            onChange={(e) => setAuthEmail(e.target.value)}
+            placeholder="Email"
+            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm"
+            required
+          />
+          <input
+            type="password"
+            value={authPassword}
+            onChange={(e) => setAuthPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm"
+            required
+          />
+          <button
+            type="submit"
+            disabled={isSubmittingAuth || isAuthLoading}
+            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold disabled:opacity-50"
+          >
+            {authMode === 'register' ? 'Create Parent Account' : 'Login'}
+          </button>
+        </form>
+        {authError && <p className="text-sm text-rose-600">{authError}</p>}
+      </div>
+    );
+  }
 
   const chartData = history.slice(-10).map(h => ({
     time: new Date(h.detected_at || h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -148,6 +284,64 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {user.role === 'parent' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Child Selector</h3>
+              <p className="text-sm text-slate-500">Choose a child profile to view scoped synced data.</p>
+            </div>
+            <select
+              value={selectedChildId || ''}
+              onChange={(e) => setSelectedChildId(e.target.value || null)}
+              className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
+            >
+              {children.length === 0 && <option value="">No child accounts yet</option>}
+              {children.map((child) => (
+                <option key={child.user_id} value={child.user_id}>
+                  {child.name} ({child.email})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <form onSubmit={handleCreateChild} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input
+              type="text"
+              value={childName}
+              onChange={(e) => setChildName(e.target.value)}
+              placeholder="Child name"
+              className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
+              required
+            />
+            <input
+              type="email"
+              value={childEmail}
+              onChange={(e) => setChildEmail(e.target.value)}
+              placeholder="Child email"
+              className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
+              required
+            />
+            <input
+              type="password"
+              value={childPassword}
+              onChange={(e) => setChildPassword(e.target.value)}
+              placeholder="Child password"
+              className="border border-slate-200 rounded-xl px-4 py-2 text-sm"
+              required
+            />
+            <button
+              type="submit"
+              disabled={isSubmittingAuth}
+              className="bg-emerald-600 text-white rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            >
+              Add Child
+            </button>
+          </form>
+          {authError && <p className="text-sm text-rose-600">{authError}</p>}
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 

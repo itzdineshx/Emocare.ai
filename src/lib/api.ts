@@ -1,4 +1,5 @@
 const RAW_API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000/api/v1';
+const AUTH_TOKEN_KEY = 'emocare-access-token';
 
 function normalizeApiBase(url: string): string {
   const trimmed = url.trim().replace(/\/+$/, '');
@@ -11,11 +12,31 @@ function normalizeApiBase(url: string): string {
 const API_BASE = normalizeApiBase(RAW_API_BASE);
 const DASHBOARD_SOURCE = (import.meta.env.VITE_DASHBOARD_SOURCE as string | undefined) || 'dashboard-web';
 
+export type UserRole = 'parent' | 'child';
+
+export interface UserRecord {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  parent_id?: string | null;
+  created_at: string;
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: 'bearer';
+  user: UserRecord;
+}
+
 export interface EmotionEventPayload {
   source: string;
   external_id?: string;
   idempotency_key?: string;
   child_id?: string;
+  parent_id?: string;
+  user_id?: string;
   session_id?: string;
   emotion: string;
   confidence: number;
@@ -30,6 +51,8 @@ export interface EmotionEventRecord {
   external_id?: string | null;
   idempotency_key?: string | null;
   child_id?: string | null;
+  parent_id?: string | null;
+  user_id?: string | null;
   session_id?: string | null;
   emotion: string;
   confidence: number;
@@ -52,6 +75,8 @@ export interface ChatMessageRecord {
   id: string;
   source: string;
   session_id: string;
+  child_id?: string | null;
+  user_id?: string | null;
   role: 'user' | 'zara' | 'system';
   text: string;
   emotion?: string | null;
@@ -66,61 +91,138 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+function buildAuthHeaders(baseHeaders: Record<string, string> = {}): Record<string, string> {
+  const token = getAuthToken();
+  if (!token) {
+    return baseHeaders;
+  }
+
+  return {
+    ...baseHeaders,
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: buildAuthHeaders((options.headers as Record<string, string>) || {}),
+  });
+  return parseJsonResponse<T>(response);
+}
+
 export function getBackendSource(): string {
   return DASHBOARD_SOURCE;
 }
 
-export async function createEmotionEvent(payload: EmotionEventPayload): Promise<EmotionEventRecord> {
-  const response = await fetch(`${API_BASE}/events`, {
+export async function registerParent(payload: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<UserRecord> {
+  return apiFetch<UserRecord>('/auth/register/parent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return parseJsonResponse<EmotionEventRecord>(response);
 }
 
-export async function getRecentEvents(limit: number, source?: string): Promise<EmotionEventRecord[]> {
+export async function login(payload: { email: string; password: string }): Promise<AuthTokenResponse> {
+  return apiFetch<AuthTokenResponse>('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getMe(): Promise<UserRecord> {
+  return apiFetch<UserRecord>('/auth/me');
+}
+
+export async function createChild(payload: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<UserRecord> {
+  return apiFetch<UserRecord>('/auth/children', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listChildren(): Promise<UserRecord[]> {
+  return apiFetch<UserRecord[]>('/auth/children');
+}
+
+export async function createEmotionEvent(payload: EmotionEventPayload): Promise<EmotionEventRecord> {
+  return apiFetch<EmotionEventRecord>('/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getRecentEvents(limit: number, source?: string, childId?: string): Promise<EmotionEventRecord[]> {
   const search = new URLSearchParams({ limit: String(limit) });
   if (source) {
     search.set('source', source);
   }
+  if (childId) {
+    search.set('child_id', childId);
+  }
 
-  const response = await fetch(`${API_BASE}/events/recent?${search.toString()}`);
-  return parseJsonResponse<EmotionEventRecord[]>(response);
+  return apiFetch<EmotionEventRecord[]>(`/events/recent?${search.toString()}`);
 }
 
-export async function getDashboardSummary(hours = 24, source?: string): Promise<DashboardSummary> {
+export async function getDashboardSummary(hours = 24, source?: string, childId?: string): Promise<DashboardSummary> {
   const search = new URLSearchParams({ hours: String(hours) });
   if (source) {
     search.set('source', source);
   }
+  if (childId) {
+    search.set('child_id', childId);
+  }
 
-  const response = await fetch(`${API_BASE}/dashboard/summary?${search.toString()}`);
-  return parseJsonResponse<DashboardSummary>(response);
+  return apiFetch<DashboardSummary>(`/dashboard/summary?${search.toString()}`);
 }
 
 export async function createChatMessage(payload: {
   source: string;
   session_id: string;
+  child_id?: string;
   role: 'user' | 'zara' | 'system';
   text: string;
   emotion?: string;
 }): Promise<ChatMessageRecord> {
-  const response = await fetch(`${API_BASE}/chat/messages`, {
+  return apiFetch<ChatMessageRecord>('/chat/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return parseJsonResponse<ChatMessageRecord>(response);
 }
 
-export async function getChatMessages(source: string, sessionId: string, limit = 100): Promise<ChatMessageRecord[]> {
+export async function getChatMessages(source: string, sessionId: string, limit = 100, childId?: string): Promise<ChatMessageRecord[]> {
   const search = new URLSearchParams({
     source,
     session_id: sessionId,
     limit: String(limit),
   });
+  if (childId) {
+    search.set('child_id', childId);
+  }
 
-  const response = await fetch(`${API_BASE}/chat/messages?${search.toString()}`);
-  return parseJsonResponse<ChatMessageRecord[]>(response);
+  return apiFetch<ChatMessageRecord[]>(`/chat/messages?${search.toString()}`);
 }

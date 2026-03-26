@@ -16,6 +16,7 @@ import {
   getChatMessages,
   getRecentEvents,
 } from '@/src/lib/api';
+import { useAuth } from '../lib/auth-context';
 
 interface Message {
   id: string;
@@ -38,6 +39,7 @@ const getOrCreateChatSessionId = () => {
 };
 
 export default function AICompanion() {
+  const { selectedChildId, user } = useAuth();
   const sourceRef = useRef(getBackendSource());
   const chatSessionIdRef = useRef(getOrCreateChatSessionId());
   const [messages, setMessages] = useState<Message[]>([
@@ -64,7 +66,12 @@ export default function AICompanion() {
   useEffect(() => {
     const loadMessages = async () => {
       try {
-        const history = await getChatMessages(sourceRef.current, chatSessionIdRef.current, 100);
+        const history = await getChatMessages(
+          sourceRef.current,
+          chatSessionIdRef.current,
+          100,
+          user?.role === 'parent' ? selectedChildId || undefined : undefined
+        );
         if (history.length > 0) {
           setMessages(
             history.map((item) => ({
@@ -78,6 +85,7 @@ export default function AICompanion() {
           await createChatMessage({
             source: sourceRef.current,
             session_id: chatSessionIdRef.current,
+            child_id: user?.role === 'parent' ? selectedChildId || undefined : undefined,
             role: 'zara',
             text: "Hi there! I'm Zara, your AI friend. How are you feeling today?",
           });
@@ -88,7 +96,7 @@ export default function AICompanion() {
     };
 
     loadMessages();
-  }, []);
+  }, [selectedChildId, user?.role]);
 
   // Speech Recognition Setup
   useEffect(() => {
@@ -124,12 +132,17 @@ export default function AICompanion() {
       await createChatMessage({
         source: sourceRef.current,
         session_id: chatSessionIdRef.current,
+        child_id: user?.role === 'parent' ? selectedChildId || undefined : undefined,
         role: 'user',
         text,
       });
 
       // Get latest emotion context
-      const latestEvents = await getRecentEvents(1, sourceRef.current);
+      const latestEvents = await getRecentEvents(
+        1,
+        sourceRef.current,
+        user?.role === 'parent' ? selectedChildId || undefined : undefined
+      );
       const latestEmotion = latestEvents.length > 0 ? latestEvents[0].emotion : 'Neutral';
       const latestGesture = latestEvents.length > 0 ? (latestEvents[0].gesture || 'None') : 'None';
 
@@ -159,6 +172,7 @@ INSTRUCTIONS:
       await createChatMessage({
         source: sourceRef.current,
         session_id: chatSessionIdRef.current,
+        child_id: user?.role === 'parent' ? selectedChildId || undefined : undefined,
         role: 'zara',
         text: zaraMessage.text,
         emotion: latestEmotion,
