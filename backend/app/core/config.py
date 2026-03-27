@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     mongodb_url: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "emocare"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173,https://emocare-child.vercel.app,https://emocare-mother.vercel.app"
     cors_origin_regex: str = ""
 
     sync_poll_interval_seconds: int = 30

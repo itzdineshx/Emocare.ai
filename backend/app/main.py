@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import router
 from app.core.config import get_settings
@@ -14,6 +17,7 @@ from app.schemas import SyncPullRequest
 from app.services.sync_service import pull_and_sync_remote
 
 settings = get_settings()
+logger = logging.getLogger("emocare.api")
 
 
 async def _auto_sync_loop(stop_event: asyncio.Event) -> None:
@@ -64,3 +68,9 @@ app.add_middleware(
 )
 
 app.include_router(router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
