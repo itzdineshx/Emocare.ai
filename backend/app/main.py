@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi import Request
@@ -37,8 +37,10 @@ async def _auto_sync_loop(stop_event: asyncio.Event) -> None:
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=settings.sync_poll_interval_seconds)
-        except TimeoutError:
+        except asyncio.TimeoutError:
             continue
+        except asyncio.CancelledError:
+            break
 
 
 @asynccontextmanager
@@ -54,7 +56,10 @@ async def lifespan(app: FastAPI):
     yield
 
     stop_event.set()
-    await auto_sync_task
+    if not auto_sync_task.done():
+        auto_sync_task.cancel()
+    with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+        await auto_sync_task
 
 
 app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
